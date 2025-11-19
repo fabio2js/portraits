@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<?import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView?>
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.safebox.home.ui.AddEntryController"
+      spacing="12"
+      style="-fx-padding: 20;">
+
+    <Label text="Aggiungi nuova voce"
+           style="-fx-font-size: 18; -fx-font-weight: bold;"/>
+
+    <TextField fx:id="titleField" promptText="Titolo (es: Email Gmail)"/>
+
+    <TextField fx:id="usernameField" promptText="Username o email"/>
+
+    <!-- Contenitore password + bottone mostra -->
+    <HBox spacing="8">
+        <PasswordField fx:id="passwordField" promptText="Password" HBox.hgrow="ALWAYS"/>
+        <TextField fx:id="passwordTextField" promptText="Password" visible="false" managed="false" HBox.hgrow="ALWAYS"/>
+
+        <Button fx:id="togglePasswordButton" onAction="#handleTogglePassword">
+            <graphic>
+                <FontAwesomeIconView fx:id="toggleIcon" glyphName="EYE" glyphSize="16"/>
+            </graphic>
+        </Button>
+    </HBox>
+
+    <!-- Barra forza password -->
+    <VBox spacing="3">
+        <ProgressBar fx:id="passwordStrengthBar"
+                     prefWidth="200"
+                     progress="0"/>
+
+        <Label fx:id="passwordStrengthLabel"
+               text="Debole"
+               style="-fx-font-size: 12; -fx-text-fill: #666;"/>
+    </VBox>
+
+    <TextArea fx:id="notesField"
+              promptText="Note"
+              prefRowCount="3"/>
+
+    <HBox spacing="10">
+        <Label text="Categoria:"/>
+        <ComboBox fx:id="categoryBox"
+                  prefWidth="180"/>
+    </HBox>
+
+    <HBox spacing="10" alignment="CENTER_RIGHT">
+        <Button text="Annulla" onAction="#handleCancel"/>
+        <Button text="Salva" onAction="#handleSave"/>
+    </HBox>
+
+</VBox>

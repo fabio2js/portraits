@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.safebox.home.ui.LoginController"
+      alignment="CENTER"
+      spacing="15">
+
+    <padding>
+        <Insets top="30" right="40" bottom="30" left="40"/>
+    </padding>
+
+    <Label text="Safebox Home"
+           style="-fx-font-size: 22; -fx-font-weight: bold;"/>
+
+    <Label wrapText="true"
+           maxWidth="320"
+           textAlignment="CENTER"
+           style="-fx-font-size: 12; -fx-text-fill: #444;">
+        <text>
+            Inserisci la tua Master Password.
+            Se è il primo avvio, scegli una nuova password e premi "Crea nuovo vault".
+            Se hai già un vault, digita la password e premi "Apri vault".
+            La Master Password non può essere recuperata.
+        </text>
+    </Label>
+
+    <PasswordField fx:id="masterPasswordField"
+                   promptText="Master password"/>
+
+    <HBox spacing="10" alignment="CENTER">
+        <Button text="Apri vault"
+                onAction="#handleOpenVault"
+                prefWidth="120"/>
+
+        <Button text="Crea nuovo vault"
+                onAction="#handleNewVault"
+                prefWidth="140"/>
+    </HBox>
+
+    <Label fx:id="errorLabel"
+           textFill="red"
+           style="-fx-font-size: 11;"/>
+</VBox>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView?>
+
+<?import javafx.geometry.Insets?>
+<VBox spacing="12" xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.safebox.home.ui.EntryEditController">
+    <padding>
+        <Insets top="20" right="20" bottom="20" left="20"/>
+    </padding>
+    <Label text="Modifica Voce"
+           style="-fx-font-size: 18; -fx-font-weight: bold;" />
+
+    <TextField fx:id="titleField" promptText="Titolo"/>
+    <TextField fx:id="usernameField" promptText="Username"/>
+    <HBox spacing="5">
+        <PasswordField fx:id="secretField" HBox.hgrow="ALWAYS"/>
+        <TextField fx:id="secretVisibleField" HBox.hgrow="ALWAYS" visible="false" managed="false"/>
+
+        <Button fx:id="toggleSecretButton" onAction="#handleToggleSecret">
+            <graphic>
+                <FontAwesomeIconView fx:id="toggleIcon" glyphName="EYE" glyphSize="16"/>
+            </graphic>
+        </Button>
+    </HBox>
+    <Label text="Forza password:" style="-fx-font-size: 12;" />
+
+    <ProgressBar fx:id="passwordStrengthBar"
+                 prefWidth="200"
+                 progress="0"
+                 style="-fx-accent: red;" />
+
+    <Label fx:id="passwordStrengthLabel"
+           text="Debole"
+           style="-fx-font-size: 12; -fx-text-fill: #666;" />
+    <TextArea fx:id="notesField" promptText="Note" prefRowCount="4"/>
+    <HBox spacing="10">
+         <Button text="📋" onAction="#handleCopyPassword"/>
+    </HBox>
+    <HBox spacing="10">
+        <Button text="Salva" onAction="#handleSave"/>
+        <Button text="Annulla" onAction="#handleCancel"/>
+    </HBox>
+
+</VBox>

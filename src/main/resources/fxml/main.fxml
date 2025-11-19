@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView?>
+<?import de.jensd.fx.glyphs.fontawesome.FontAwesomeIcon?>
+
+<?import javafx.scene.image.ImageView?>
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.safebox.home.ui.MainController"
+            prefWidth="800"
+            prefHeight="600">
+
+    <!-- HEADER -->
+    <top>
+        <HBox spacing="15" alignment="CENTER_LEFT"
+              style="-fx-padding: 18; -fx-background-color: linear-gradient(to right, #1c1c1c, #2d2d2d);">
+            <Label text="Safebox Home"
+                   style="-fx-font-size: 22; -fx-font-weight: bold; -fx-text-fill: white;"/>
+        </HBox>
+    </top>
+
+    <!-- CONTENT -->
+    <center>
+        <VBox spacing="15" style="-fx-padding: 20;">
+
+            <!-- INFO LABEL -->
+
+            <Label fx:id="infoLabel"
+                   style="-fx-font-size: 13; -fx-text-fill: #555;"/>
+            <Label fx:id="fileInfoLabel"
+                   style="-fx-font-size: 13; -fx-text-fill: #555;"/>
+
+            <!-- VAULT STATS -->
+            <Label fx:id="vaultStatsLabel"
+                   style="-fx-text-fill: #444; -fx-font-size: 13; -fx-font-weight: bold;" />
+
+            <TabPane fx:id="mainTabs" tabClosingPolicy="UNAVAILABLE">
+                <tabs>
+
+                    <!-- TAB PASSWORD -->
+                    <Tab text="Password">
+                        <content>
+                            <VBox spacing="10" style="-fx-padding: 10;">
+                                <TableView fx:id="tableEntries" VBox.vgrow="ALWAYS">
+                                    <columns>
+                                        <TableColumn fx:id="titleColumn" text="Titolo"/>
+                                        <TableColumn fx:id="usernameColumn" text="Username"/>
+                                        <TableColumn fx:id="categoryColumn" text="Categoria"/>
+                                        <TableColumn fx:id="noteColumn" text="Note"/>
+                                    </columns>
+                                </TableView>
+
+                                <HBox spacing="12">
+
+                                    <!-- AGGIUNGI -->
+                                    <Button text=" Aggiungi" onAction="#handleAdd">
+                                        <graphic>
+                                            <FontAwesomeIconView glyphName="PLUS" glyphSize="14"/>
+                                        </graphic>
+                                    </Button>
+
+                                    <!-- MODIFICA -->
+                                    <Button text=" Modifica" onAction="#handleEdit">
+                                        <graphic>
+                                            <FontAwesomeIconView glyphName="EDIT" glyphSize="14"/>
+                                        </graphic>
+                                    </Button>
+
+                                    <!-- ELIMINA -->
+                                    <Button text=" Elimina" onAction="#handleDeleteEntry">
+                                        <graphic>
+                                            <FontAwesomeIconView glyphName="TRASH" glyphSize="14"/>
+                                        </graphic>
+                                    </Button>
+
+                                </HBox>
+                            </VBox>
+                        </content>
+                    </Tab>
+
+                    <!-- TAB FILE -->
+                    <Tab text="File">
+                        <VBox spacing="12" style="-fx-padding: 15;">
+
+                            <TableView fx:id="fileTable" VBox.vgrow="ALWAYS">
+                                <columns>
+                                    <TableColumn fx:id="fileNameColumn" text="Nome file"/>
+                                    <TableColumn fx:id="fileSizeColumn" text="Dimensione"/>
+                                    <TableColumn fx:id="fileTypeColumn" text="Tipo"/>
+                                </columns>
+                            </TableView>
+
+                            <HBox spacing="12">
+
+                                <!-- AGGIUNGI FILE -->
+                                <Button text=" Aggiungi file" onAction="#handleAddFile">
+                                    <graphic>
+                                        <FontAwesomeIconView glyphName="UPLOAD" glyphSize="14"/>
+                                    </graphic>
+                                </Button>
+
+                                <!-- APRI FILE -->
+                                <Button text=" Apri file" onAction="#handleOpenFile">
+                                    <graphic>
+                                        <FontAwesomeIconView glyphName="FOLDER_OPEN" glyphSize="14"/>
+                                    </graphic>
+                                </Button>
+
+                                <!-- ESPORTA FILE -->
+                                <Button text=" Esporta" onAction="#handleExportFile">
+                                    <graphic>
+                                        <FontAwesomeIconView glyphName="DOWNLOAD" glyphSize="14"/>
+                                    </graphic>
+                                </Button>
+
+                                <!-- ELIMINA FILE -->
+                                <Button text=" Elimina" onAction="#handleDeleteFile">
+                                    <graphic>
+                                        <FontAwesomeIconView glyphName="TRASH" glyphSize="14"/>
+                                    </graphic>
+                                </Button>
+
+                            </HBox>
+
+                        </VBox>
+                    </Tab>
+
+                </tabs>
+            </TabPane>
+        </VBox>
+    </center>
+
+    <!-- FOOTER -->
+    <bottom>
+        <VBox spacing="10" style="-fx-padding: 10;" alignment="CENTER">
+
+            <!-- Bottoni backup centrati -->
+            <HBox spacing="15" alignment="CENTER">
+
+                <Button text="Backup" onAction="#handleExportBackup">
+                    <graphic>
+                        <FontAwesomeIconView glyphName="SAVE" size="16"/>
+                    </graphic>
+                </Button>
+
+                <Button text="Ripristina backup" onAction="#handleRestoreBackup">
+                    <graphic>
+                        <FontAwesomeIconView glyphName="UPLOAD" size="16"/>
+                    </graphic>
+                </Button>
+
+            </HBox>
+
+            <!-- Progress + cancel -->
+            <HBox spacing="10" alignment="CENTER">
+
+                <ProgressBar fx:id="fileProgressBar"
+                             prefWidth="350"
+                             visible="false"
+                             progress="0"/>
+
+                <Label fx:id="fileProgressPercentLabel"
+                       text=""
+                       style="-fx-font-size: 12; -fx-font-weight: bold;"/>
+
+                <Button fx:id="cancelButton"
+                        text="Annulla"
+                        visible="false"
+                        onAction="#handleCancelFileOperation">
+                    <graphic>
+                        <FontAwesomeIconView glyphName="TIMES" size="14"/>
+                    </graphic>
+                </Button>
+
+            </HBox>
+
+            <Label fx:id="speedLabel"
+                   text=""
+                   style="-fx-font-size: 11; -fx-text-fill: #777;"
+                   alignment="CENTER"/>
+
+            <Label fx:id="etaLabel"
+                   text=""
+                   style="-fx-font-size: 11; -fx-text-fill: #777;"
+                   alignment="CENTER"/>
+
+            <Label fx:id="fileProgressDetailsLabel"
+                   text=""
+                   style="-fx-font-size: 12; -fx-text-fill: #555;"
+                   alignment="CENTER"/>
+
+        </VBox>
+    </bottom>
+
+
+
+
+</BorderPane>
