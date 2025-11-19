@@ -3,6 +3,7 @@ package com.safebox.home.ui;
 import com.safebox.home.model.SecretEntry;
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
 import javafx.stage.Stage;
 import lombok.Getter;
@@ -25,6 +26,8 @@ public class AddEntryController {
     @Getter private boolean saved = false;
     @Getter private SecretEntry entry;
     @FXML private FontAwesomeIconView toggleIcon;
+    @FXML private FontAwesomeIconView genPassword;
+    @FXML private Button togglePasswordGenerator;
 
     @FXML
     public void initialize() {
@@ -34,6 +37,31 @@ public class AddEntryController {
         // Listener per aggiornare la forza della password
         passwordField.textProperty().addListener((o, oldV, newV) -> updatePasswordStrength(newV));
         passwordTextField.textProperty().addListener((o, oldV, newV) -> updatePasswordStrength(newV));
+    }
+
+
+
+    public void handleOpenPasswordGenerator() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/password_generator.fxml"));
+            DialogPane pane = loader.load();
+
+            Dialog<Void> dialog = new Dialog<>();
+            dialog.setDialogPane(pane);
+            dialog.setTitle("Generatore Password");
+            dialog.initOwner(passwordTextField.getScene().getWindow());
+
+            // Importante: senza pulsanti il Dialog NON si chiude!
+            pane.getButtonTypes().add(ButtonType.CLOSE);
+
+            // Chiudi correttamente anche la X della finestra
+            dialog.setOnCloseRequest(e -> dialog.close());
+
+            dialog.showAndWait();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 
