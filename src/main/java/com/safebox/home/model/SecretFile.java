@@ -17,4 +17,6 @@ public class SecretFile {
 
     // IV usato per AES/GCM base64
     private String iv;
+
+
 }

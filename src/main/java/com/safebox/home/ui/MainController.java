@@ -3,34 +3,46 @@ package com.safebox.home.ui;
 import com.safebox.home.crypto.CryptoService;
 import com.safebox.home.model.SecretEntry;
 import com.safebox.home.model.SecretFile;
+import com.safebox.home.persistence.VaultFormatV2;
 import com.safebox.home.service.VaultContext;
 import com.safebox.home.util.UIUtils;
+import javafx.animation.Animation;
+import javafx.animation.FadeTransition;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView;
-import de.jensd.fx.glyphs.fontawesome.FontAwesomeIcon;
+import com.safebox.home.persistence.VaultRepository;
 
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Insets;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.util.Duration;
+import lombok.Setter;
 
+import javax.crypto.SecretKey;
 import java.awt.Desktop;
 import java.io.*;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
-import java.util.UUID;
+import java.nio.file.StandardOpenOption;
+import java.security.SecureRandom;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -39,7 +51,10 @@ import static com.safebox.home.util.UIUtils.*;
 
 public class MainController {
 
+    @Setter
     private VaultContext context;
+
+    private final VaultRepository repository = new VaultRepository();
 
     @FXML private TableView<SecretEntry> tableEntries;
     @FXML private TableColumn<SecretEntry, String> titleColumn;
@@ -53,17 +68,15 @@ public class MainController {
     @FXML private TableColumn<SecretFile, String> fileTypeColumn;
 
     @FXML private Label infoLabel;
-    @FXML private Label fileInfoLabel;
+
 
     @FXML private ProgressBar fileProgressBar;
     @FXML private Label fileProgressPercentLabel;
     @FXML private Label fileProgressDetailsLabel;
 
-    @FXML private Label        speedLabel;
+    @FXML private Label    speedLabel;
     @FXML private Label    etaLabel;
     @FXML private Button  cancelButton;
-
-
 
 
     /**
@@ -121,9 +134,9 @@ public class MainController {
 
 
     @FXML
-    private void handleRestoreBackup() {
+    private void handleRestoreBackup() throws Exception {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Ripristina backup Safebox");
+        chooser.setTitle("Ripristina backup SafeBox");
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Backup Safebox (*.sbx)", "*.sbx")
         );
@@ -132,6 +145,7 @@ public class MainController {
         if (backup == null) return;
 
         restoreBackup(backup);
+
     }
 
 
@@ -147,7 +161,11 @@ public class MainController {
         fileProgressBar.setProgress(0);
     }
 
-    private void restoreBackup(File backupFile) {
+
+
+    private char[] masterPasswordCopy;
+
+    private void restoreBackup(File backupFile) throws Exception {
 
         Path vaultPath = context.getVaultPath();          // es: .../vault.json
         Path vaultDir  = vaultPath.getParent();           // es: cartella vault/
@@ -161,9 +179,104 @@ public class MainController {
         if (alert.showAndWait().orElse(ButtonType.NO) != ButtonType.YES)
             return;
 
+        // === DIALOG PASSWORD MIGLIORATO ===
+        Dialog<char[]> pwdDialog = new Dialog<>();
+        pwdDialog.setTitle("Password vault");
+        pwdDialog.setHeaderText("Inserisci la password del vault di backup");
+
+// Bottoni
+        ButtonType okType = new ButtonType("Ripristina", ButtonBar.ButtonData.OK_DONE);
+        pwdDialog.getDialogPane().getButtonTypes().setAll(okType, ButtonType.CANCEL);
+
+// Layout migliorato
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(15);
+        grid.setPadding(new Insets(20, 20, 10, 20)); // padding superiore/laterale
+
+        PasswordField pwdField = new PasswordField();
+        pwdField.setPromptText("Password");
+        pwdField.setPrefWidth(260); // campo più largo
+
+        grid.add(new Label("Password:"), 0, 0);
+        grid.add(pwdField, 1, 0);
+
+// Aggiunge layout alla dialog
+        pwdDialog.getDialogPane().setContent(grid);
+
+// Focus automatico sul campo
+        Platform.runLater(pwdField::requestFocus);
+
+// ENTER → conferma
+        pwdDialog.getDialogPane().lookupButton(okType).addEventFilter(
+                ActionEvent.ACTION, event -> {
+                    if (pwdField.getText() == null || pwdField.getText().isEmpty()) {
+                        event.consume(); // blocca conferma
+                    }
+                }
+        );
+
+// Conversione risultato
+        pwdDialog.setResultConverter(button -> {
+            if (button == okType) {
+                String txt = pwdField.getText();
+                return (txt != null ? txt.toCharArray() : null);
+            }
+            return null;
+        });
+
+        pwdDialog.setResultConverter(button -> {
+            if (button == okType) {
+                String txt = pwdField.getText();
+                return (txt != null ? txt.toCharArray() : null);
+            }
+            return null;
+        });
+
+        java.util.Optional<char[]> pwdOpt = pwdDialog.showAndWait();
+        if (pwdOpt.isEmpty() || pwdOpt.get() == null || pwdOpt.get().length == 0) {
+            // utente ha annullato o non ha inserito password
+            return;
+        }
+        final char[] restorePassword = pwdOpt.get();
+
+        // === VALIDAZIONE PASSWORD PRIMA DEL RIPRISTINO ===
+        // Estraggo solo "safebox.vault" in una directory temporanea.
+        Path tempVault = Files.createTempFile("vault_check_", ".vault");
+        tempVault.toFile().deleteOnExit();
+
+        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(backupFile))) {
+            ZipEntry en;
+            while ((en = zis.getNextEntry()) != null) {
+                if (en.getName().equals("safebox.vault")) {
+                    try (OutputStream os = Files.newOutputStream(tempVault)) {
+                        zis.transferTo(os);  // estrazione unica del file vault
+                    }
+                    break;
+                }
+                zis.closeEntry();
+            }
+        }
+
+        // Leggo il SALT del vault dentro il backup
+        byte[] saltCheck = VaultFormatV2.readSaltOnly(tempVault);
+
+        // Provo a caricare il vault per validare la password (HMAC check)
+        try {
+            char[] pwdClone = restorePassword.clone();
+            VaultContext tmp = repository.loadVaultV2(pwdClone, tempVault);
+
+        } catch (Exception ex) {
+            UIUtils.showError("Password errata. Impossibile ripristinare il backup.");
+            return; // BLOCCA tutto
+        }
+
+
+
+
         long totalBytes = backupFile.length();
 
-        Task<Void> task = new Task<Void>() {
+        Task<Void> task = new Task<>() {
             @Override
             protected Void call() throws Exception {
 
@@ -209,38 +322,51 @@ public class MainController {
                             Files.createDirectories(outPath.getParent());
 
                             try (OutputStream os = Files.newOutputStream(outPath)) {
-
+                                long lastUpdate = 0;
                                 int len;
-                                while ((len = zis.read(buffer)) != -1) {
 
-                                    if (isCancelled())
-                                        return null;
+                                while ((len = zis.read(buffer)) != -1) {
+                                    if (isCancelled()) return null;
 
                                     os.write(buffer, 0, len);
                                     copied += len;
 
-                                    long finalCopied = copied;
-                                    updateProgress(finalCopied, totalBytes);
+                                    // micro pausa ogni 512 KB
+                                    if (copied % (1024 * 512) == 0) {
+                                        Thread.sleep(1);
+                                    }
 
-                                    // velocità + ETA
-                                    long elapsed = System.nanoTime() - startNanos;
-                                    double sec = elapsed / 1_000_000_000.0;
+                                    long now = System.currentTimeMillis();
+                                    if (now - lastUpdate > 50) {
+                                        lastUpdate = now;
 
-                                    double speed = sec > 0 ? finalCopied / sec : 0;
-                                    long remaining = totalBytes - finalCopied;
-                                    double eta = speed > 0 ? remaining / speed : -1;
+                                        long finalCopied = copied;
+                                        updateProgress(finalCopied, totalBytes);
 
-                                    Platform.runLater(() -> {
-                                        fileProgressPercentLabel.setText(
-                                                String.format("%.0f%%", (finalCopied * 100.0) / totalBytes)
-                                        );
-                                        fileProgressDetailsLabel.setText(
-                                                String.format("%.2f MB/s", speed / (1024 * 1024))
-                                        );
-                                        etaLabel.setText(
-                                                eta > 0 ? "ETA: " + formatEta(eta) : "ETA..."
-                                        );
-                                    });
+                                        long elapsed = System.nanoTime() - startNanos;
+                                        double sec = elapsed / 1_000_000_000.0;
+                                        double speed = sec > 0 ? finalCopied / sec : 0;
+                                        long remaining = totalBytes - finalCopied;
+                                        double eta = speed > 0 ? remaining / speed : -1;
+
+                                        Platform.runLater(() -> {
+                                            fileProgressPercentLabel.setText(
+                                                    String.format("%.0f%%", (finalCopied * 100.0) / totalBytes)
+                                            );
+                                            fileProgressDetailsLabel.setText(
+                                                    String.format("%.2f MB/s", speed / (1024 * 1024))
+                                            );
+                                            etaLabel.setText(
+                                                    eta > 0 ? "ETA: " + formatEta(eta) : "ETA..."
+                                            );
+                                        });
+                                    }
+                                }
+
+                                // flush + sync per evitare letture su file incompleti
+                                os.flush();
+                                if (os instanceof FileOutputStream fos) {
+                                    fos.getFD().sync();
                                 }
                             }
                         }
@@ -270,11 +396,26 @@ public class MainController {
         task.setOnSucceeded(e -> {
             clearProgressUI();
             try {
-                context.reloadVault();
-            }catch(Throwable ex){
+                // per sicurezza uso una copia della password
+                char[] pwdForLoad = (restorePassword != null ? restorePassword.clone() : null);
+
+                // ricarico il vault dal file ripristinato
+                this.context = repository.loadVaultV2(
+                        pwdForLoad,
+                        vaultPath
+                );
+
+                // Propago la master password nel nuovo context
+                this.context.setMasterPassword(
+                        restorePassword != null ? restorePassword.clone() : null
+                );
+
+            } catch (Throwable ex) {
                 UIUtils.showError("Errore durante il ripristino del backup");
+                ex.printStackTrace();
                 return;
             }
+
             UIUtils.showToast(fileTable, "Backup ripristinato correttamente");
             loadTable();
             loadFiles();
@@ -287,7 +428,11 @@ public class MainController {
             e.getSource().getException().printStackTrace();
         });
 
-
+        task.setOnCancelled(e -> {
+            clearProgressUI();
+            UIUtils.showToast(fileTable, "Operazione annullata");
+            currentFileTask = null;
+        });
 
         Thread th = new Thread(task);
         th.setDaemon(true);
@@ -297,10 +442,12 @@ public class MainController {
 
 
 
+
+
     @FXML
     private void handleExportBackup() {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Esporta backup Safebox");
+        chooser.setTitle("Esporta backup SafeBox");
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Backup Safebox (*.sbx)", "*.sbx")
         );
@@ -461,11 +608,85 @@ public class MainController {
         th.start();
     }
 
+    private static final long INACTIVITY_TIMEOUT_MS = 3 * 60_000; // 3 minuti
+    private javafx.animation.Timeline inactivityTimer;
+    private boolean locked = false;
+    @FXML
+    private void initialize() {
+        System.out.println("FXML inizializzato.");
+
+        System.out.println("mainRoot = " + mainRoot);
+        unlockButton.setOnAction(e -> unlockScreen(unlockPasswordField.getText().toCharArray()));
+
+        unlockPasswordField.setOnAction(e ->
+                unlockScreen(unlockPasswordField.getText().toCharArray()));
+
+
+    }
+
+    private void handleAutoLogout() {
+        lockScreen();         // NON chiudiamo il vault, solo blocchiamo
+    }
 
 
 
 
+    @FXML private VBox lockPane;
+    @FXML private PasswordField unlockPasswordField;
+    @FXML private Button unlockButton;
+    @FXML private Label unlockErrorLabel;
+    @FXML private BorderPane appRoot;
 
+
+    private void unlockScreen(char[] pwd) {
+        try {
+            // 1) Ricostruzione KEY da password
+            byte[] keyMaterial = VaultFormatV2.deriveKeyMaterial(
+                    pwd,
+                    context.getSalt(),
+                    context.getIterations(),
+                    512
+            );
+
+            byte[] expected = context.getKeyEnc().getEncoded();
+            byte[] candidate = Arrays.copyOfRange(keyMaterial, 0, 32);
+
+            // 2) Confronto costante contro keyEnc
+            if (!Arrays.equals(expected, candidate)) {
+                unlockErrorLabel.setText("Password errata");
+                return;
+            }
+
+            // 3) Sblocco riuscito
+            locked = false;
+
+            lockPane.setVisible(false);     // nasconde overlay
+            mainRoot.setDisable(false);     // riabilita UI
+            unlockPasswordField.clear();
+            unlockErrorLabel.setText("");
+            lockPane.setDisable(true);
+
+            appRoot.setDisable(false);
+            // reset timer inattività
+            resetInactivityTimer();
+
+        } catch (Exception ex) {
+            unlockErrorLabel.setText("Errore durante lo sblocco");
+        }
+    }
+
+    private void lockScreen() {
+        locked = true;
+
+        lockPane.setVisible(true);
+        lockPane.setDisable(false);
+
+        unlockPasswordField.clear();
+        unlockErrorLabel.setText("");
+
+        appRoot.setDisable(true);   // Disabilita UI principale
+    }
+    @FXML private StackPane mainRoot;
 
 
     @FXML
@@ -487,26 +708,28 @@ public class MainController {
         }
     }
 
-
-    private Button iconButton(String text, FontAwesomeIcon iconName) {
-        FontAwesomeIconView icon = new FontAwesomeIconView(iconName);
-        icon.setGlyphSize(16);
-        icon.setStyle("-fx-fill: #444;");
-
-        Button btn = new Button(text, icon);
-        btn.setContentDisplay(ContentDisplay.LEFT);
-        btn.setGraphicTextGap(8);
-        btn.setStyle("-fx-padding: 6 12;");
-
-        return btn;
+    private void registerSceneActivity(Scene scene) {
+        scene.addEventFilter(MouseEvent.ANY, e -> resetInactivityTimer());
+        scene.addEventFilter(KeyEvent.ANY, e -> resetInactivityTimer());
     }
+    private javafx.animation.Timeline countdownTimer;
+    @FXML private Label locklockCountdownLabel;
 
     private final CryptoService crypto = new CryptoService();
-    private Task<Void> currentFileTask;
+    private Task currentFileTask;
 
     public void init(VaultContext context) {
-        this.context = context;
 
+        Scene scene = mainRoot.getScene();
+        if (scene != null) {
+            registerSceneActivity(scene);
+        } else {
+            // scena non pronta, la registriamo dopo il render
+            Platform.runLater(() -> registerSceneActivity(mainRoot.getScene()));
+        }
+        this.context = context;
+        char[] mp = context.getMasterPassword();
+        this.masterPasswordCopy = (mp != null ? mp.clone() : null);
         // password table
         titleColumn.setCellValueFactory(new PropertyValueFactory<>("title"));
         usernameColumn.setCellValueFactory(new PropertyValueFactory<>("username"));
@@ -542,44 +765,162 @@ public class MainController {
         fileProgressBar.setVisible(false);
         fileProgressPercentLabel.setVisible(false);
         fileProgressDetailsLabel.setVisible(false);
+        startInactivityTimer();
+        registerActivityListeners();
+        updateVaultStats();
     }
+    private Timeline countdownTimeline;
+    private int secondsLeft;
+    private void startCountdown(int seconds) {
+        secondsLeft = seconds;
+
+        // Animazione fade-in se invisibile
+        if (countdownLabel.getOpacity() == 0) {
+            FadeTransition ft = new FadeTransition(Duration.millis(400), countdownLabel);
+            ft.setFromValue(0);
+            ft.setToValue(1);
+            ft.play();
+        }
+
+        if (countdownTimeline != null) countdownTimeline.stop();
+
+        countdownTimeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> updateCountdown())
+        );
+        countdownTimeline.setCycleCount(seconds);
+        countdownTimeline.playFromStart();
+    }
+
+    private void updateCountdown() {
+            long sec = remainingMillis.get() / 1000;
+
+            if (sec <= 0) {
+                countdownLabel.setVisible(false);
+                return;
+            }
+
+            countdownLabel.setVisible(true);
+            countdownLabel.setText("⏱ " + sec + "s");
+
+            if (sec <= 5) {
+                countdownLabel.setStyle("-fx-text-fill: red; -fx-font-size: 14px; "
+                        + "-fx-background-color: rgba(0,0,0,0.35); -fx-padding: 6;");
+            } else if (sec <= 10) {
+                countdownLabel.setStyle("-fx-text-fill: orange; -fx-font-size: 14px; "
+                        + "-fx-background-color: rgba(0,0,0,0.35); -fx-padding: 6;");
+            } else {
+                countdownLabel.setStyle("-fx-text-fill: white; -fx-font-size: 14px; "
+                        + "-fx-background-color: rgba(0,0,0,0.35); -fx-padding: 6;");
+            }
+        }
+
+
+
+
+    @FXML private Label countdownLabel;
+
+
+
+    private void resetInactivityTimer() {
+        if (locked) return;
+        remainingMillis.set(INACTIVITY_TIMEOUT_MS);
+        startInactivityTimer(); // <-- ricarica entrambi i timer in modo pulito
+    }
+
+    private void registerActivityListeners() {
+        mainRoot.addEventFilter(javafx.scene.input.MouseEvent.ANY, e -> resetInactivityTimer());
+        mainRoot.addEventFilter(javafx.scene.input.KeyEvent.ANY, e -> resetInactivityTimer());
+    }
+
+    private final AtomicLong remainingMillis = new AtomicLong(INACTIVITY_TIMEOUT_MS);
+
+    private void startInactivityTimer() {
+
+        // Stoppa timer vecchi per evitare Timeline sovrapposte
+        if (inactivityTimer != null) inactivityTimer.stop();
+        if (countdownTimer != null) countdownTimer.stop();
+       // Timer di lock
+        inactivityTimer = new Timeline(
+                new KeyFrame(Duration.millis(remainingMillis.get()), e -> lockScreen())
+        );
+        inactivityTimer.setCycleCount(1);
+
+        // Timer countdown (1 secondo per tick)
+        countdownTimer = new Timeline(
+                new KeyFrame(Duration.seconds(1), e -> {
+                    remainingMillis.addAndGet(-1000);
+                    updateCountdown();
+
+                    if (remainingMillis.get() <= 0) {
+                        countdownTimer.stop();
+                    }
+                })
+        );
+        countdownTimer.setCycleCount(Animation.INDEFINITE);
+
+        inactivityTimer.playFromStart();
+        countdownTimer.playFromStart();
+    }
+
+
 
     private void loadFiles() {
 
-        if (context == null || context.getVault() == null) {
-            fileTable.getItems().clear();
-            return;
-        }
+        ObservableList<SecretFile> data = FXCollections.observableArrayList();
+
+        Path vaultFile = context.getVaultPath();
+        Path vaultDir  = (vaultFile != null) ? vaultFile.getParent() : null;
 
 
-        List<SecretFile> validFiles = new ArrayList<>();
+        Iterator<SecretFile> iter = context.getVault().getFiles().iterator();
 
-        Path vaultDir = context.getVaultPath().getParent(); // directory vault
+       while(iter.hasNext()){
+           var e = iter.next();
+            try {
 
-        for (SecretFile sf : context.getVault().getFiles()) {
-            Path encryptedPath = vaultDir.resolve(sf.getEncryptedPath());
+                 String encPath = e.getEncryptedPath();
+                if (encPath != null && !encPath.isBlank() && vaultDir != null) {
 
-            if (!Files.exists(encryptedPath)) {
-                System.err.println("[WARN] File mancante, rimosso dal vault: " + sf.getFilename());
-                continue; // NON aggiunge il file mancante
+                    Path filePath = vaultDir.resolve(encPath);
+
+                    if (Files.exists(filePath)) {
+                        e.setSize(Files.size(filePath));
+
+                        if (e.getMimeType() == null || e.getMimeType().isBlank() || e.getMimeType().equals("?")) {
+                            e.setMimeType(guessMimeFromName(e.getFilename()));
+                        }
+
+                        data.add(e);
+                    } else {
+                        iter.remove();
+                       System.err.println("Rimosso dal Vault file mancante nel filesystem: " + filePath);
+                    }
+
+
+                }else{
+                    //
+                    // --- Nessun dato disponibile
+                    //
+                    System.err.println("File ignorato (né dataBase64 né encryptedPath): " + e.getFilename());
+                }
+
+
+
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
+        };
 
-            validFiles.add(sf);
-        }
-
-        // Se alcuni file mancavano → salva vault ripulito
-        if (validFiles.size() != context.getVault().getFiles().size()) {
-            context.getVault().setFiles(validFiles);
-            try { context.save(); } catch (Exception ignored) {}
-        }
-
-        // Mostra solo i file realmente presenti
-        fileTable.getItems().setAll(validFiles);
-
-        fileInfoLabel.setText("Files nel vault: " +
-                validFiles.size());
+        fileTable.setItems(data);
     }
 
+
+    private String guessMimeFromName(String name) {
+        try {
+            return Files.probeContentType(Path.of(name));
+        } catch (Exception e) {
+            return "application/octet-stream";
+        }
+    }
 
     private void loadTable() {
         ObservableList<SecretEntry> data =
@@ -588,8 +929,7 @@ public class MainController {
         tableEntries.setItems(data);
         tableEntries.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
-        infoLabel.setText("Voci nel vault: " +
-                context.getVault().getEntries().size());
+        updateVaultStats();
     }
 
     // formatter dimensioni file
@@ -622,14 +962,22 @@ public class MainController {
         }
 
         try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/entry_edit.fxml"));
+            FXMLLoader loader = new FXMLLoader(
+                    getClass().getResource("/fxml/entry_edit.fxml")
+            );
             Parent root = loader.load();
 
             EntryEditController controller = loader.getController();
+
+            // Passiamo un callback che verrà chiamato quando l'entry è salvata
             controller.init(selected, () -> {
-                tableEntries.refresh();
                 try {
-                    context.save();
+                    // 1) Refresh tabella
+                    tableEntries.refresh();
+
+                    // 2) Salva vault aggiornato su disco
+                    repository.saveVaultV2(context, context.getVault());
+
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -665,13 +1013,19 @@ public class MainController {
             dialog.showAndWait();
 
             if (ctrl.isSaved()) {
+                // 1) aggiorniamo il modello in memoria
                 context.getVault().add(ctrl.getEntry());
-                context.save();
+
+                // 2) persistiamo il vault sul file .vault (formato V2)
+                repository.saveVaultV2(context, context.getVault());
+
+                // 3) aggiorniamo la tabella a video
                 loadTable();
             }
 
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
+            showError("Errore durante il salvataggio della voce");
         }
     }
 
@@ -679,25 +1033,19 @@ public class MainController {
         if (context == null || context.getVault() == null) {
 
             if (infoLabel != null) {
-                infoLabel.setText("Voci nel vault: 0");
+                infoLabel.setText("Voci nel vault: 0 | Files nel valut: 0"   );
             }
-            if (fileInfoLabel != null) {
-                fileInfoLabel.setText("File nel vault: 0");
-            }
-
             return;
         }
 
         int entryCount = context.getVault().getEntries().size();
-        int fileCount  = context.getVault().getFiles().size();
+        int fileCount  = fileTable.getItems().size();
 
         if (infoLabel != null) {
-            infoLabel.setText("Voci nel vault: " + entryCount);
+            infoLabel.setText("Voci nel vault: " + entryCount + " | Files nel vault: "+fileCount);
         }
 
-        if (fileInfoLabel != null) {
-            fileInfoLabel.setText("File nel vault: " + fileCount);
-        }
+
 
     }
 
@@ -730,73 +1078,93 @@ public class MainController {
         File file = chooser.showOpenDialog(fileTable.getScene().getWindow());
         if (file == null) return;
 
-        if (file.length() > CryptoService.MAX_GCM_SIZE_BYTES) {
+        long totalBytes = file.length();
+
+        if (totalBytes > CryptoService.MAX_GCM_SIZE_BYTES) {
             showError(
                     "Il file è troppo grande per la cifratura attuale (limite circa 2 GB per file).\n"
-                            + "Dimensione file: " + humanReadableSize(file.length())
+                            + "Dimensione file: " + humanReadableSize(totalBytes)
             );
             return;
         }
 
         String id = UUID.randomUUID().toString();
-        Path vaultFile = context.getVaultPath();         // safebox.vault
-        Path vaultDir = vaultFile.getParent();           // directory /vaults
-        Path out = vaultDir.resolve("files").resolve(id + ".enc");
 
-        byte[] iv = crypto.generateIv();
-        long totalBytes = file.length();
+        // IV AES-GCM per questo file
+        byte[] iv = new byte[12];
+        new SecureRandom().nextBytes(iv);
 
-        Task<Void> task = new Task<Void>() {
+
+        Task<byte[]> task = new Task<byte[]>() {
 
             @Override
-            protected Void call() throws Exception {
+            protected byte[] call() throws Exception {
 
                 long startNanos = System.nanoTime();
+                long copied = 0;
 
-                crypto.encryptFileStreaming(
-                        file.toPath(),
-                        out,
-                        context.getKey(),
-                        iv,
-                        copied -> {
-                            if (isCancelled()) {
-                                Thread.currentThread().interrupt();
-                                return;
-                            }
+                ByteArrayOutputStream plainOut = new ByteArrayOutputStream(8192);
 
-                            // ---- Calcolo progress ----
-                            double progress = (double) copied / totalBytes;
+                try (InputStream in = Files.newInputStream(file.toPath())) {
+
+                    byte[] buf = new byte[65536];
+                    int read;
+                    long lastUpdate =  0L;
+
+                    while ((read = in.read(buf)) != -1) {
+
+                        if (isCancelled()) return null;
+
+                        long now = System.currentTimeMillis();
+
+                        if (now - lastUpdate > 50) {
+                            lastUpdate = now;
                             updateProgress(copied, totalBytes);
+                            long elapsed = System.nanoTime() - startNanos;
+                            double sec = elapsed / 1_000_000_000.0;
+                            double speed = sec > 0 ? copied / sec : 0;
 
-                            // ---- Calcolo velocità ----
-                            long elapsedNanos = System.nanoTime() - startNanos;
-                            double elapsedSec = elapsedNanos / 1_000_000_000.0;
-
-                            double speedBytesPerSec = elapsedSec > 0 ? copied / elapsedSec : 0;
-                            double speedMB = speedBytesPerSec / (1024.0 * 1024.0);
-
-                            // ---- Calcolo ETA ----
                             long remaining = totalBytes - copied;
-                            double etaSec = speedBytesPerSec > 0 ? remaining / speedBytesPerSec : -1;
+                            double eta = speed > 0 ? remaining / speed : -1;
 
-                            // ---- Calcolo percentuale ----
-                            double percent = progress * 100.0;
-                            String etaText = etaSec > 0 ? formatEta(etaSec) : "calcolo…";
+                            double percent = (copied * 100.0) / totalBytes;
 
-                            // ---- Aggiorna UI ----
+                            String etaText = eta > 0 ? formatEta(eta) : "calcolo…";
+                            double speedMB = speed / (1024 * 1024);
+
                             Platform.runLater(() -> {
                                 fileProgressPercentLabel.setText(String.format("%.0f%%", percent));
-                                fileProgressDetailsLabel.setText(
-                                        String.format("%.2f MB/s, ETA: %s", speedMB, etaText)
-                                );
+                                fileProgressDetailsLabel.setText(String.format("%.2f MB/s, ETA: %s",
+                                        speedMB, etaText));
                             });
                         }
-                );
+                        plainOut.write(buf, 0, read);
+                        copied += read;
 
-                return null;
+
+
+
+                    }
+                }
+
+                // Cifra il contenuto del file
+                byte[] plain = plainOut.toByteArray();
+                SecretKey fileKey = context.getKeyEnc();
+                if (fileKey == null) {
+                    fileKey = crypto.deriveKeyFromPassword(
+                            masterPasswordCopy,
+                            context.getSalt(),
+                            CryptoService.ITERATIONS
+                    );
+                    context.setKeyEnc(fileKey);
+                }
+
+
+                return crypto.encrypt(fileKey, iv, plain);
             }
         };
 
+        // ---- UI ----
         currentFileTask = task;
         prepareProgressUi();
         fileProgressBar.progressProperty().bind(task.progressProperty());
@@ -804,50 +1172,68 @@ public class MainController {
         task.setOnSucceeded(e -> {
             resetProgressUi();
 
+            byte[] cipher = task.getValue();
+
             SecretFile sf = new SecretFile();
             sf.setId(id);
             sf.setFilename(file.getName());
+            sf.setSize(file.length());
             try {
                 sf.setMimeType(Files.probeContentType(file.toPath()));
             } catch (IOException ex) {
                 sf.setMimeType("?");
             }
-            sf.setSize(file.length());
+            sf.setIv(Base64.getEncoder().encodeToString(iv));
             sf.setEncryptedPath("files/" + id + ".enc");
             sf.setIv(Base64.getEncoder().encodeToString(iv));
+            sf.setSize(file.length());
 
             context.getVault().getFiles().add(sf);
-
             try {
-                context.save();
+                Path vaultDir = context.getVaultPath().getParent();
+                Path filesDir = vaultDir.resolve("files");
+                Files.createDirectories(filesDir);
+
+                Path encPath = filesDir.resolve(id + ".enc");
+                Files.write(encPath, cipher, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+            } catch (IOException ex) {
+                ex.printStackTrace();
+                showError("Errore nel salvataggio del file cifrato su disco");
+                return;
+            }
+            try {
+                repository.saveVaultV2(context, context.getVault());
             } catch (Exception ex) {
                 ex.printStackTrace();
+                showError("Errore durante il salvataggio del vault");
             }
 
             loadFiles();
+            updateVaultStats();
             UIUtils.showToast(fileTable, "File aggiunto");
             currentFileTask = null;
         });
 
         task.setOnFailed(e -> {
             resetProgressUi();
-            showError("Errore nel caricamento del file");
-            if (task.getException() != null) {
-                task.getException().printStackTrace();
-            }
+            showError("Errore nel caricamento/cifratura del file");
+            task.getException().printStackTrace();
             currentFileTask = null;
         });
 
         task.setOnCancelled(e -> {
+
             resetProgressUi();
             UIUtils.showToast(fileTable, "Operazione annullata");
             currentFileTask = null;
         });
 
-        Thread t = new Thread(task);
-        t.setDaemon(true);
-        t.start();
+        Thread th = new Thread(task);
+        th.setDaemon(true);
+        th.start();
     }
+
 
     @FXML
     private void handleOpenFile() {
@@ -863,6 +1249,7 @@ public class MainController {
             return;
         }
 
+        // File temporaneo
         Path temp;
         try {
             temp = Files.createTempFile("safebox_", "_" + sf.getFilename());
@@ -872,10 +1259,11 @@ public class MainController {
             return;
         }
 
+        // IV
         byte[] iv = Base64.getDecoder().decode(sf.getIv());
         long totalBytes = sf.getSize();
-        Task<Void> task = new Task<Void>() {
 
+        Task<Void> task = new Task<>() {
             @Override
             protected Void call() throws Exception {
 
@@ -884,7 +1272,7 @@ public class MainController {
                 crypto.decryptFileStreaming(
                         encrypted,
                         temp,
-                        context.getKey(),
+                        context.getKeyEnc(),   // chiave corretta!
                         iv,
                         copied -> {
                             if (isCancelled()) return;
@@ -895,17 +1283,16 @@ public class MainController {
                             long elapsedNanos = System.nanoTime() - startNanos;
                             double elapsedSec = elapsedNanos / 1_000_000_000.0;
 
-                            double speedBytesPerSec = elapsedSec > 0 ? copied / elapsedSec : 0;
-                            double speedMB = speedBytesPerSec / (1024.0 * 1024.0);
+                            double speedBytes = elapsedSec > 0 ? copied / elapsedSec : 0;
+                            double speedMB = speedBytes / (1024.0 * 1024.0);
 
                             long remaining = totalBytes - copied;
-                            double etaSec = speedBytesPerSec > 0 ? remaining / speedBytesPerSec : -1;
+                            double etaSec = speedBytes > 0 ? remaining / speedBytes : -1;
 
-                            double percent = progress * 100.0;
                             String etaText = etaSec > 0 ? formatEta(etaSec) : "calcolo…";
 
                             Platform.runLater(() -> {
-                                fileProgressPercentLabel.setText(String.format("%.0f%%", percent));
+                                fileProgressPercentLabel.setText(String.format("%.0f%%", progress * 100));
                                 fileProgressDetailsLabel.setText(
                                         String.format("%.2f MB/s, ETA: %s", speedMB, etaText)
                                 );
@@ -917,7 +1304,7 @@ public class MainController {
             }
         };
 
-
+        // UI
         currentFileTask = task;
         prepareProgressUi();
         fileProgressBar.progressProperty().bind(task.progressProperty());
@@ -934,10 +1321,8 @@ public class MainController {
 
         task.setOnFailed(e -> {
             resetProgressUi();
-            showError("Errore nel download del file");
-            if (task.getException() != null) {
-                task.getException().printStackTrace();
-            }
+            showError("Errore durante la decifratura del file");
+            if (task.getException() != null) task.getException().printStackTrace();
             currentFileTask = null;
         });
 
@@ -951,6 +1336,10 @@ public class MainController {
         t.setDaemon(true);
         t.start();
     }
+
+
+
+
 
     @FXML
     private void handleExportFile() {
@@ -979,58 +1368,39 @@ public class MainController {
             long totalBytes = Files.size(encryptedPath);
             byte[] iv = Base64.getDecoder().decode(selected.getIv());
 
-            Task<Void> task = new Task<Void>() {
+            Task<Void> task = new Task<>() {
 
                 @Override
                 protected Void call() throws Exception {
 
                     long startNanos = System.nanoTime();
-                    long[] lastCopied = {0};
-                    long[] lastTime = {System.nanoTime()};
 
                     crypto.decryptFileStreaming(
                             encryptedPath,
                             dest.toPath(),
-                            context.getKey(),
+                            context.getKeyEnc(),     // CHIAVE GIUSTA
                             iv,
                             copied -> {
+                                if (isCancelled()) return;
 
-                                if (isCancelled()) {
-                                    Thread.currentThread().interrupt();
-                                    return;
-                                }
-
-                                // ---- Aggiornamento progress ----
+                                double progress = (double) copied / totalBytes;
                                 updateProgress(copied, totalBytes);
 
-                                // ---- Calcolo velocità ed ETA ----
-                                long now = System.nanoTime();
+                                long elapsedNanos = System.nanoTime() - startNanos;
+                                double elapsedSec = elapsedNanos / 1_000_000_000.0;
 
-                                long deltaBytes = copied - lastCopied[0];
-                                long deltaTimeNanos = now - lastTime[0];
-
-                                double speedBytesPerSec = 0;
-                                if (deltaTimeNanos > 0) {
-                                    speedBytesPerSec = (deltaBytes * 1_000_000_000.0) / deltaTimeNanos;
-                                }
+                                double speedBytes = elapsedSec > 0 ? copied / elapsedSec : 0;
+                                double speedMB = speedBytes / (1024.0 * 1024.0);
 
                                 long remaining = totalBytes - copied;
-                                double etaSec = speedBytesPerSec > 0 ? remaining / speedBytesPerSec : -1;
+                                double etaSec = speedBytes > 0 ? remaining / speedBytes : -1;
 
-                                lastCopied[0] = copied;
-                                lastTime[0] = now;
+                                String etaText = etaSec > 0 ? formatEta(etaSec) : "calcolo…";
 
-                                // ---- Preparo i valori da mostrare ----
-                                double progress = (double) copied / totalBytes;
-                                double percent = progress * 100.0;
-                                double speedMb = speedBytesPerSec / (1024.0 * 1024.0);
-                                String etaText = etaSec > 0 ? formatEta(etaSec) : "calcolo in corso";
-
-                                // ---- Aggiorno UI nel thread JavaFX ----
                                 Platform.runLater(() -> {
-                                    fileProgressPercentLabel.setText(String.format("%.0f%%", percent));
+                                    fileProgressPercentLabel.setText(String.format("%.0f%%", progress * 100));
                                     fileProgressDetailsLabel.setText(
-                                            String.format("%.2f MB/s, ETA: %s", speedMb, etaText)
+                                            String.format("%.2f MB/s, ETA: %s", speedMB, etaText)
                                     );
                                 });
                             }
@@ -1040,6 +1410,7 @@ public class MainController {
                 }
             };
 
+            // ---- UI ----
             currentFileTask = task;
             prepareProgressUi();
             fileProgressBar.progressProperty().bind(task.progressProperty());
@@ -1053,9 +1424,7 @@ public class MainController {
             task.setOnFailed(e -> {
                 resetProgressUi();
                 showError("Errore durante l'estrazione del file");
-                if (task.getException() != null) {
-                    task.getException().printStackTrace();
-                }
+                if (task.getException() != null) task.getException().printStackTrace();
                 currentFileTask = null;
             });
 
@@ -1074,6 +1443,7 @@ public class MainController {
             showError("Errore durante l'esportazione del file");
         }
     }
+
 
     @FXML
     private void handleDeleteEntry() {
@@ -1100,7 +1470,7 @@ public class MainController {
                 context.getVault().remove(selected);
 
                 try {
-                    context.save();   // salva il vault senza questo segreto
+                    repository.saveVaultV2(context, context.getVault());
                     loadTable();      // aggiorna la tabella
                     UIUtils.showToast(tableEntries, "Voce eliminata");
                 } catch (Exception e) {
@@ -1151,7 +1521,7 @@ public class MainController {
                     context.getVault().getFiles().remove(selected);
 
                     // 3) salva vault aggiornato
-                    context.save();
+                    repository.saveVaultV2(context, context.getVault());
 
                     // 4) aggiorna tabella + label
                     loadFiles();
@@ -1171,7 +1541,7 @@ public class MainController {
 
     @FXML
     private void handleCancelFileOperation() {
-        if (currentFileTask != null && currentFileTask.isRunning()) {
+        if (currentFileTask != null && currentFileTask.isRunning() ) {
             currentFileTask.cancel();
         }
     }

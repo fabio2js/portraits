@@ -1,5 +1,6 @@
 package com.safebox.home.model;
 
+import com.safebox.home.crypto.CryptoService;
 import lombok.Data;
 
 import java.security.SecureRandom;
@@ -11,7 +12,9 @@ public class Vault {
 
     private List<SecretEntry> entries = new ArrayList<>();
 
+    private List<SecretFile> files = new ArrayList<>();
 
+    private byte[] mac;
 
     public void add(SecretEntry entry) {
         entries.add(entry);
@@ -21,10 +24,7 @@ public class Vault {
         entries.remove(entry);
     }
 
-    public void generateSalt() {
-        this.salt = new byte[16];
-        new java.security.SecureRandom().nextBytes(this.salt);
-    }
+
     /**
      * Salt usato per derivare la chiave simmetrica dei FILE nel vault.
      * È indipendente dal salt usato da VaultRepository per cifrare il JSON del vault.
@@ -32,6 +32,5 @@ public class Vault {
     private byte[] salt;
 
 
-        private List<SecretFile> files = new ArrayList<>();
 
 }

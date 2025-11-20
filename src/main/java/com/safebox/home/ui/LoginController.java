@@ -2,24 +2,29 @@ package com.safebox.home.ui;
 
 import com.safebox.home.crypto.CryptoService;
 import com.safebox.home.model.Vault;
+import com.safebox.home.persistence.VaultFormatV2;
 import com.safebox.home.persistence.VaultRepository;
 import com.safebox.home.service.VaultContext;
-import com.safebox.home.service.VaultService;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
+import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.Button;
+import javafx.scene.control.ProgressIndicator;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 
 import javax.crypto.SecretKey;
-import java.io.IOException;
-import java.nio.file.Files;
+import javax.crypto.spec.SecretKeySpec;
+import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 public class LoginController {
-
-
 
     @FXML
     private PasswordField masterPasswordField;
@@ -28,170 +33,148 @@ public class LoginController {
     private Label errorLabel;
 
     @FXML
-    private Label vaultPathLabel  = new Label();
+    private Button openVaultButton;
 
-    private final VaultRepository vaultRepository = new VaultRepository();
+    @FXML
+    private Button createVaultButton;   // <- aggiunto per showSaveDialog
 
-    private final Path appDir = Paths.get("").toAbsolutePath();
-    private final Path vaultDir = appDir.resolve("vaults");
-    private final Path vaultFile = vaultDir.resolve("safebox.vault");
+    private final VaultRepository repository = new VaultRepository();
+
 
     @FXML
     public void initialize() {
-        errorLabel.setText("");
-        vaultPathLabel.setText("Vault: " + vaultFile.toAbsolutePath());
+        circleProgress.setVisible(false);
+        circleProgress.setProgress(-1); // spinner circolare indeterminato
     }
-
+    /**
+     * APRE un vault esistente (V2)
+     */
     @FXML
-    public void handleOpenVault() {
-        errorLabel.setText("");
-
-        char[] master = getMasterPassword();
-        if (master.length == 0) {
-            errorLabel.setText("Inserisci la master password.");
-            return;
-        }
-
-        if (!Files.exists(vaultFile)) {
-            errorLabel.setText("Nessun vault esistente trovato (" + vaultFile + ").");
-            return;
-        }
-
-
-
+    private void handleOpenVault() {
         try {
-            Vault vault = vaultRepository.load(master, vaultFile);
-
-                // Se il vecchio vault non aveva salt → generiamola
-            if (vault.getSalt() == null) {
-                vault.generateSalt();
+            String pwd = masterPasswordField.getText();
+            if (pwd.isEmpty()) {
+                showError("Inserisci la Master Password");
+                return;
             }
 
-            VaultContext context = new VaultContext(vault, master, vaultFile);
+            // file chooser...
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Seleziona il vault");
+            chooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("Safebox Vault (*.vault)", "*.vault")
+            );
 
+            File file = chooser.showOpenDialog(masterPasswordField.getScene().getWindow());
+            if (file == null) return;
 
-            openMainWindow(context);
-        } catch (javax.crypto.AEADBadTagException ex) {
-            ex.printStackTrace();
-            errorLabel.setText("Master password errata oppure file vault non compatibile.");
-        } catch (Exception e) {
-            e.printStackTrace();
-            errorLabel.setText("Errore nell'apertura del vault.");
-        }
-    }
+            Path vaultPath = file.toPath();
 
-    @FXML
-    public void handleCreateVault() {
-        errorLabel.setText("");
+            // CARICO IL VAULT — OK
+            VaultContext ctx = repository.loadVaultV2(pwd.toCharArray(), vaultPath);
+            ctx.setMasterPassword(pwd.toCharArray());
 
-        char[] master = getMasterPassword();
-        if (master.length == 0) {
-            errorLabel.setText("Inserisci una master password per creare il vault.");
-            return;
-        }
-
-        try {
-            if (!Files.exists(vaultDir)) {
-                Files.createDirectories(vaultDir);
-            }
-
-            Vault vault = new Vault();
-            vault.generateSalt();
-
-            vaultRepository.save(vault, master, vaultFile);
-
-            VaultContext context = new VaultContext(vault, master, vaultFile);
-            openMainWindow(context);
+            openMainWindow(ctx);
 
         } catch (Exception e) {
             e.printStackTrace();
-            errorLabel.setText("Errore nella creazione del vault.");
-        } finally {
-            wipeCharArray(master);
+            showError("Impossibile aprire il vault. Password errata o file corrotto.");
         }
     }
+
+
+    /**
+     * CREA un nuovo vault V2
+     */
     @FXML
-    private void handleNewVault() {
+    private void handleCreateVault() throws Exception {
 
-        Alert confirm = new Alert(Alert.AlertType.WARNING);
-        confirm.setTitle("Creazione nuovo vault");
-        confirm.setHeaderText("ATTENZIONE: Operazione irreversibile");
-        confirm.setContentText(
-                "Stai per creare un nuovo vault.\n\n" +
-                        "Tutti i segreti esistenti verranno eliminati.\n" +
-                        "Tutti i file cifrati nel vault precedente saranno PERDUTI definitivamente.\n\n" +
-                        "Procedere?"
-        );
 
-        ButtonType yes = new ButtonType("Crea nuovo vault", ButtonBar.ButtonData.OK_DONE);
-        ButtonType cancel = new ButtonType("Annulla", ButtonBar.ButtonData.CANCEL_CLOSE);
+        // Mostra subito la progress bar (spinner/torta)
+        circleProgress.setVisible(true);
+        circleProgress.setProgress(-1);
+        openVaultButton.setDisable(true);
+        createVaultButton.setDisable(true);
+        masterPasswordField.setDisable(true);
 
-        confirm.getButtonTypes().setAll(yes, cancel);
-        confirm.initOwner(masterPasswordField.getScene().getWindow());
-
-        // Se l’utente NON conferma → stop
-        ButtonType result = confirm.showAndWait().orElse(cancel);
-        if (result != yes) {
+         char[] pwd = masterPasswordField.getText().toCharArray();
+        if (pwd.length == 0) {
+            showError("Inserisci una master password");
             return;
         }
 
-        try {
+// 2) Scegli file vault
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Salva nuovo vault");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Safebox Vault (*.vault)", "*.vault"));
 
+        File file = chooser.showSaveDialog(masterPasswordField.getScene().getWindow());
+        if (file == null) return;
 
-            // 2) elimina cartella dei file
-            Path dir = Paths.get("vaults");
-            Path filesDir = dir.resolve("files");
-            if (Files.exists(filesDir)) {
-                deleteDirectoryRecursively(filesDir);
-            }
+        Path vaultPath = file.toPath();
+        CryptoService cs = new CryptoService();
+// 3) Genera salt
+        byte[] salt = cs.generateSalt(16);
+        int iter = CryptoService.ITERATIONS;
 
-            // 3) crea nuovo vault
-            handleCreateVault();
+// 4) Deriva keyEnc e keyMac
+        byte[] kdf = VaultFormatV2.deriveKeyMaterial(pwd, salt, iter, 512);
+        byte[] keyEncBytes = Arrays.copyOfRange(kdf, 0, 32);
+        byte[] keyMacBytes = Arrays.copyOfRange(kdf, 32, 64);
 
-            Alert ok = new Alert(Alert.AlertType.INFORMATION,
-                    "Nuovo vault creato con successo.", ButtonType.OK);
-            ok.showAndWait();
+        SecretKey keyEnc = new SecretKeySpec(keyEncBytes, "AES");
+        SecretKey keyMac = new SecretKeySpec(keyMacBytes, "HmacSHA256");
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            Alert error = new Alert(Alert.AlertType.ERROR,
-                    "Errore durante la creazione del nuovo vault.", ButtonType.OK);
-            error.showAndWait();
-        }
+// 5) Crea vault vuoto
+        Vault vault = new Vault();
+        vault.setFiles(new ArrayList<>());
+
+// 6) Inizializza VaultContext
+        VaultContext ctx = new VaultContext();
+        ctx.setVault(vault);
+        ctx.setVaultPath(vaultPath);
+        ctx.setSalt(salt);
+        ctx.setIterations(iter);
+        ctx.setKeyEnc(keyEnc);
+        ctx.setKeyMac(keyMac);
+
+// 7) Salva vault con V2
+        repository.saveVaultV2(ctx, vault);
+
+// 8) Apri finestra principale
+        openMainWindow(ctx);
+
+    }
+    @FXML private ProgressIndicator circleProgress;
+
+    // ------------------------------------------------------------------
+
+    private void showError(String msg) {
+        errorLabel.setText(msg);
     }
 
-    private void deleteDirectoryRecursively(Path path) throws IOException {
-        if (!Files.exists(path)) return;
+    private void openMainWindow(VaultContext ctx) throws Exception {
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/main.fxml"));
+        Parent root = loader.load();
+        Scene scene = new Scene(root);
 
-        Files.walk(path)
-                .sorted((a, b) -> b.compareTo(a)) // elimina prima i file poi le cartelle
-                .forEach(p -> {
-                    try { Files.delete(p); } catch (IOException ignored) {}
-                });
-    }
-    private char[] getMasterPassword() {
-        String pwd = masterPasswordField.getText();
-        return pwd != null ? pwd.toCharArray() : new char[0];
-    }
 
-    private void wipeCharArray(char[] arr) {
-        for (int i = 0; i < arr.length; i++) {
-            arr[i] = 0;
-        }
-    }
+        Stage stage = (Stage) masterPasswordField.getScene().getWindow();
 
-    private void openMainWindow(VaultContext context) throws IOException {
 
-        FXMLLoader loader = new FXMLLoader(
-                getClass().getResource("/fxml/main.fxml"));
-        Scene scene = new Scene(loader.load());
+        stage.setScene(scene);
+        stage.centerOnScreen();
+        stage.show();
 
+
+
+// dopo
         MainController controller = loader.getController();
-        controller.init(context);
+        controller.init(ctx);
 
-        Stage currentStage = (Stage) masterPasswordField.getScene().getWindow();
-        currentStage.setTitle("Safebox Home - Vault");
-        currentStage.setScene(scene);
-        currentStage.centerOnScreen();
+// UI del login
+        circleProgress.setVisible(false);
+
     }
+
 }

@@ -4,6 +4,7 @@ import com.safebox.home.model.SecretEntry;
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
@@ -71,6 +72,32 @@ public class EntryEditController {
         if (pwd.matches(".*[^a-zA-Z0-9].*")) score += 1;
 
         return Math.min(score, 5);  // max 5
+    }
+
+
+
+
+    public void handleOpenPasswordGenerator() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/password_generator.fxml"));
+            DialogPane pane = loader.load();
+
+            Dialog<Void> dialog = new Dialog<>();
+            dialog.setDialogPane(pane);
+            dialog.setTitle("Generatore Password");
+            dialog.initOwner(passwordStrengthLabel.getScene().getWindow());
+
+            // Importante: senza pulsanti il Dialog NON si chiude!
+            pane.getButtonTypes().add(ButtonType.CLOSE);
+
+            // Chiudi correttamente anche la X della finestra
+            dialog.setOnCloseRequest(e -> dialog.close());
+
+            dialog.showAndWait();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public void init(SecretEntry entry, Runnable onSaveCallback) {

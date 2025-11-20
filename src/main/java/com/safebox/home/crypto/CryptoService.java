@@ -1,11 +1,13 @@
 package com.safebox.home.crypto;
 
-
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -15,45 +17,61 @@ import java.util.function.LongConsumer;
 
 public class CryptoService {
 
-
-
+    public static final int ITERATIONS = 300_000;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     // Limite pratico imposto da SunJCE per AES/GCM
     public static final long MAX_GCM_SIZE_BYTES = 2_000_000_000L; // ~1.86 GiB
+    /* =====================================================
+       SALT
+       ===================================================== */
 
-    public byte[] generateIv() {
-        byte[] iv = new byte[12];
-        SecureRandom random = new SecureRandom();
-        random.nextBytes(iv);
-        return iv;
+    public byte[] generateSalt(int length) {
+        byte[] salt = new byte[length];
+        SECURE_RANDOM.nextBytes(salt);
+        return salt;
     }
 
-    public byte[] encrypt(SecretKey key, byte[] ivOut, byte[] data) throws Exception {
-        byte[] iv = new byte[12];
-        new SecureRandom().nextBytes(iv);
-        System.arraycopy(iv, 0, ivOut, 0, 12);
+    /* =====================================================
+       PBKDF2 → AES-256 KEY DERIVATION
+       ===================================================== */
 
+    public SecretKey deriveKeyFromPassword(char[] password, byte[] salt, int iterations) {
+        try {
+            PBEKeySpec spec = new PBEKeySpec(password, salt, iterations, 256);
+            SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
+            byte[] keyBytes = skf.generateSecret(spec).getEncoded();
+            return new SecretKeySpec(keyBytes, "AES");
+        } catch (Exception e) {
+            throw new RuntimeException("Errore derivazione chiave PBKDF2", e);
+        }
+    }
+
+    /* =====================================================
+       AES/GCM ENCRYPT / DECRYPT
+       ===================================================== */
+
+    public byte[] encrypt(SecretKey key, byte[] iv, byte[] data) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(128, iv));
         return cipher.doFinal(data);
     }
 
-    public byte[] decrypt(SecretKey key, byte[] iv, byte[] cipherData) throws Exception {
+    public byte[] decrypt(SecretKey key, byte[] iv, byte[] cipherBytes) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
-        return cipher.doFinal(cipherData);
+        return cipher.doFinal(cipherBytes);
     }
 
-    public void encryptFileStreaming(
-            Path inFile,
-            Path outFile,
-            SecretKey key,
-            byte[] iv,
-            LongConsumer progressCallback
-    ) throws Exception {
+    /* =====================================================
+       FILE STREAM ENCRYPT
+       ===================================================== */
 
-        GCMParameterSpec spec = new GCMParameterSpec(128, iv);
+    public void encryptFileStreaming(Path inFile, Path outFile,
+                                     SecretKey key, byte[] iv,
+                                     LongConsumer progressCallback) throws Exception {
+
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.ENCRYPT_MODE, key, spec);
+        cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(128, iv));
 
         Files.createDirectories(outFile.getParent());
 
@@ -67,23 +85,21 @@ public class CryptoService {
             while ((read = in.read(buffer)) > 0) {
                 cos.write(buffer, 0, read);
                 copied += read;
-
                 if (progressCallback != null) progressCallback.accept(copied);
             }
         }
     }
 
+    /* =====================================================
+       FILE STREAM DECRYPT
+       ===================================================== */
 
-    public void decryptFileStreaming(
-            Path input,
-            Path output,
-            SecretKey key,
-            byte[] iv,
-            LongConsumer onChunk) throws Exception {
+    public void decryptFileStreaming(Path input, Path output,
+                                     SecretKey key, byte[] iv,
+                                     LongConsumer onChunk) throws Exception {
 
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        GCMParameterSpec spec = new GCMParameterSpec(128, iv);
-        cipher.init(Cipher.DECRYPT_MODE, key, spec);
+        cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
 
         try (InputStream is = Files.newInputStream(input);
              CipherInputStream cis = new CipherInputStream(is, cipher);
@@ -96,11 +112,8 @@ public class CryptoService {
             while ((read = cis.read(buffer)) != -1) {
                 os.write(buffer, 0, read);
                 total += read;
-                onChunk.accept(total);   // <-- callback puro (no JavaFX)
+                if (onChunk != null) onChunk.accept(total);
             }
         }
     }
-
-
-
 }

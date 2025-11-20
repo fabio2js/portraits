@@ -25,6 +25,12 @@
                 <FontAwesomeIconView fx:id="toggleIcon" glyphName="EYE" glyphSize="16"/>
             </graphic>
         </Button>
+        <Button fx:id="togglePasswordGenerator" onAction="#handleOpenPasswordGenerator">
+            <graphic>
+                <FontAwesomeIconView fx:id="genPassword" glyphName="MAGIC" glyphSize="16"/>
+            </graphic>
+
+        </Button>
     </HBox>
     <Label text="Forza password:" style="-fx-font-size: 12;" />
 

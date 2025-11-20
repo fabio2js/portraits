@@ -13,7 +13,7 @@
         <Insets top="30" right="40" bottom="30" left="40"/>
     </padding>
 
-    <Label text="Safebox Home"
+    <Label text="SafeBox Home"
            style="-fx-font-size: 22; -fx-font-weight: bold;"/>
 
     <Label wrapText="true"
@@ -28,19 +28,22 @@
         </text>
     </Label>
 
+
     <PasswordField fx:id="masterPasswordField"
                    promptText="Master password"/>
 
     <HBox spacing="10" alignment="CENTER">
-        <Button text="Apri vault"
+        <Button fx:id="openVaultButton"  text="Apri vault"
                 onAction="#handleOpenVault"
                 prefWidth="120"/>
 
-        <Button text="Crea nuovo vault"
-                onAction="#handleNewVault"
+        <Button fx:id="createVaultButton"  text="Crea nuovo vault"
+                onAction="#handleCreateVault"
                 prefWidth="140"/>
     </HBox>
-
+    <VBox alignment="CENTER">
+        <ProgressIndicator fx:id="circleProgress" prefWidth="55" prefHeight="55" visible="false" />
+    </VBox>
     <Label fx:id="errorLabel"
            textFill="red"
            style="-fx-font-size: 11;"/>

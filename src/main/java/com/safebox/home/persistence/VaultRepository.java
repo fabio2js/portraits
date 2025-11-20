@@ -1,61 +1,88 @@
 package com.safebox.home.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.safebox.home.service.VaultContext;
 import com.safebox.home.crypto.CryptoService;
-import com.safebox.home.crypto.KeyDerivationService;
 import com.safebox.home.model.Vault;
+import lombok.Data;
 
 import javax.crypto.SecretKey;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.file.*;
-import java.security.SecureRandom;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.file.Path;
+import java.util.Arrays;
 
 public class VaultRepository {
 
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final KeyDerivationService kds = new KeyDerivationService();
     private final CryptoService crypto = new CryptoService();
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final VaultFormatV2 formatV2 = new VaultFormatV2(crypto, mapper);
 
-    public void save(Vault vault, char[] masterPwd, Path file) throws Exception {
-        byte[] salt = kds.generateSalt();
-        SecretKey key = kds.deriveKey(masterPwd, salt);
 
-        byte[] iv = new byte[12];
-        SecureRandom random = new SecureRandom();
-        random.nextBytes(iv);
+    public void verifyPassword(char[] pwd, byte[] salt, int iter, Vault vault) throws Exception {
 
-        byte[] plain = mapper.writeValueAsBytes(vault);
-        byte[] cipher = crypto.encrypt(key, iv, plain);
+        byte[] kdf = VaultFormatV2.deriveKeyMaterial(pwd, salt, iter, 512);
+        SecretKey keyMac = new SecretKeySpec(Arrays.copyOfRange(kdf, 32, 64), "HmacSHA256");
 
-        byte[] output = new byte[16 + 12 + cipher.length];
-        System.arraycopy(salt, 0, output, 0, 16);
-        System.arraycopy(iv,   0, output, 16, 12);
-        System.arraycopy(cipher, 0, output, 28, cipher.length);
+        // se l'HMAC finale non corrisponde → password errata
+        if (!VaultFormatV2.verifyVaultMac(vault, keyMac)) {
+            throw new SecurityException("Password errata");
+        }
+    }
 
-        Files.write(file, output);
+   @Data
+    public static class VaultLoadResult {
+        private final Vault vault;
+        private final javax.crypto.SecretKey keyEnc;
+        private final javax.crypto.SecretKey keyMac;
+        private final byte[] salt;
+        private final int iterations;
+
+        public VaultLoadResult(Vault vault,
+                               javax.crypto.SecretKey keyEnc,
+                               javax.crypto.SecretKey keyMac,
+                               byte[] salt,
+                               int iterations) {
+            this.vault = vault;
+            this.keyEnc = keyEnc;
+            this.keyMac = keyMac;
+            this.salt = salt;
+            this.iterations = iterations;
+        }
 
 
     }
+    /**
+     * CARICA un Vault V2 da disco e ritorna il VaultContext completo
+     */
+    public VaultContext loadVaultV2(char[] masterPwd, Path vaultPath) throws Exception {
 
-    public Vault load(char[] masterPwd, Path file) throws Exception {
-        byte[] all = Files.readAllBytes(file);
-        byte[] salt = slice(all, 0, 16);
-        byte[] iv   = slice(all, 16, 12);
-        byte[] cipher = slice(all, 28, all.length - 28);
+        // --- 1) Leggi il vault con formato V2 ---
+         VaultLoadResult result =
+                formatV2.readVaultV2(masterPwd, vaultPath);
 
-        SecretKey key = kds.deriveKey(masterPwd, salt);
-        byte[] plain = crypto.decrypt(key, iv, cipher);
-        return mapper.readValue(plain, Vault.class);
+        // --- 2) Costruisci il VaultContext ---
+        VaultContext ctx = new VaultContext();
+        ctx.setVaultPath(vaultPath);
+        ctx.setVault(result.getVault());
+        ctx.setKeyEnc(result.getKeyEnc());
+        ctx.setKeyMac(result.getKeyMac());
+        ctx.setSalt(result.getSalt());
+        ctx.setIterations(result.getIterations());
+
+        return ctx;
     }
 
-    private byte[] slice(byte[] src, int start, int len) {
-        byte[] result = new byte[len];
-        System.arraycopy(src, start, result, 0, len);
-        return result;
+    /**
+     * SALVA un Vault usando V2 (header+KDF+AES-GCM+HMAC)
+     */
+    public void saveVaultV2(VaultContext ctx, Vault vault) throws Exception {
+        formatV2.writeVaultV2(
+                vault,
+                ctx.getVaultPath(),
+                ctx.getKeyEnc(),
+                ctx.getKeyMac(),
+                ctx.getSalt(),
+                ctx.getIterations()
+        );
     }
-
-
 }
-

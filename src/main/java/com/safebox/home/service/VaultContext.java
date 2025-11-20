@@ -1,63 +1,26 @@
 package com.safebox.home.service;
 
-import com.safebox.home.crypto.CryptoService;
-import com.safebox.home.crypto.KeyDerivationService;
-import com.safebox.home.model.SecretFile;
 import com.safebox.home.model.Vault;
-import com.safebox.home.persistence.VaultRepository;
-import lombok.Getter;
+import lombok.Data;
 
 import javax.crypto.SecretKey;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
+@Data
 public class VaultContext {
-    @Getter
-    private final VaultRepository repository = new VaultRepository();
 
-    @Getter private  Vault vault;
-    @Getter private final Path vaultPath;
-    @Getter private final CryptoService crypto;
-    @Getter private final SecretKey key;
+    private Path vaultPath;
 
-    private final char[] masterPassword;
+    private byte[] salt;
+    private int iterations;
 
-    public VaultContext(Vault vault, char[] masterPassword, Path vaultPath) throws Exception {
-        this.vault = vault;
-        this.masterPassword = masterPassword;
-        this.vaultPath = vaultPath;
+    // Chiavi derivate da PBKDF2-HMAC-SHA512
+    private SecretKey keyEnc;   // AES-256-GCM
+    private SecretKey keyMac;   // HMAC-SHA256
 
-        // 1. Inizializza CryptoService
-        this.crypto = new CryptoService();
+    // Vault deserializzato
+    private Vault vault;
 
-        // 2. Deriva la chiave dal master password + salt del vault
-        KeyDerivationService kdf = new KeyDerivationService();
-        this.key = kdf.deriveKey(masterPassword, vault.getSalt());
+    private char[] masterPassword;
 
-
-
-        try {
-            // Crea C:\git\safebox\vaults\files
-            Files.createDirectories(vaultPath.getParent().resolve("files"));
-        } catch (Exception e) {
-            throw new RuntimeException("Impossibile creare la struttura del vault", e);
-        }
-    }
-
-
-    public void reloadVault() throws Exception {
-        vault = repository.load(masterPassword,vaultPath);
-    }
-
-    public void save() throws Exception {
-        repository.save(vault, masterPassword, vaultPath);
-    }
-
-    public void addFile(SecretFile file) {
-        vault.getFiles().add(file);
-    }
-
-    public void removeFile(SecretFile file) {
-        vault.getFiles().remove(file);
-    }
 }
