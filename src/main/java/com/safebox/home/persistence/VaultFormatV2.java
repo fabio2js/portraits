@@ -80,6 +80,7 @@ public final class VaultFormatV2 {
 
     /**
      * Scrive il vault in formato SafeBox v2:
+     * Scrive il vault in formato SafeBox v2:
      *
      * MAGIC(4) | VERSION(1) | FLAGS(1)
      * KDF_ALGO(1) | KDF_SALT_LEN(1) | KDF_SALT | KDF_ITER(4 big-endian)

@@ -11,7 +11,8 @@ public class SecretFile {
     private String filename;
     private long size;
     private String mimeType;
-
+    private long addTime;
+    private long lastEdit;
     // Dove è memorizzato il file cifrato
     private String encryptedPath;
 

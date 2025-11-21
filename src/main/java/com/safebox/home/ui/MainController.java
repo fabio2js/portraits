@@ -15,6 +15,8 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
+import javafx.event.Event;
+import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import com.safebox.home.persistence.VaultRepository;
 
@@ -23,25 +25,35 @@ import javafx.geometry.Insets;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.effect.GaussianBlur;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import javafx.util.Duration;
 import lombok.Setter;
 
 import javax.crypto.SecretKey;
-import java.awt.Desktop;
+import java.awt.*;
 import java.io.*;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -51,6 +63,8 @@ import static com.safebox.home.util.UIUtils.*;
 
 public class MainController {
 
+    public Button homeButton;
+    public TabPane mainTabs;
     @Setter
     private VaultContext context;
 
@@ -67,6 +81,10 @@ public class MainController {
     @FXML private TableColumn<SecretFile, Number> fileSizeColumn;
     @FXML private TableColumn<SecretFile, String> fileTypeColumn;
 
+    @FXML private TableColumn<SecretFile, Number> fileAddTimeColumn;
+    @FXML private TableColumn<SecretFile, Number> fileLastEditColumn;
+
+
     @FXML private Label infoLabel;
 
 
@@ -78,7 +96,10 @@ public class MainController {
     @FXML private Label    etaLabel;
     @FXML private Button  cancelButton;
 
+    @FXML private TextField searchTextField;
 
+    private ObservableList<SecretEntry> fullEntries = FXCollections.observableArrayList();
+    private ObservableList<SecretFile> fullFiles    = FXCollections.observableArrayList();
     /**
      * Esporta un backup cifrato del vault:
      *  - safebox.vault (già cifrato)
@@ -167,9 +188,7 @@ public class MainController {
 
     private void restoreBackup(File backupFile) throws Exception {
 
-        Path vaultPath = context.getVaultPath();          // es: .../vault.json
-        Path vaultDir  = vaultPath.getParent();           // es: cartella vault/
-        Path filesDir  = vaultDir.resolve("files");       // es: cartella vault/files/
+
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setHeaderText("Ripristino backup");
@@ -179,6 +198,9 @@ public class MainController {
         if (alert.showAndWait().orElse(ButtonType.NO) != ButtonType.YES)
             return;
 
+        Path vaultPath = context.getVaultPath();          // es: .../vault.json
+        Path vaultDir  = vaultPath.getParent();           // es: cartella vault/
+        Path filesDir  = vaultDir.resolve("files");       // es: cartella vault/files/
         // === DIALOG PASSWORD MIGLIORATO ===
         Dialog<char[]> pwdDialog = new Dialog<>();
         pwdDialog.setTitle("Password vault");
@@ -416,7 +438,7 @@ public class MainController {
                 return;
             }
 
-            UIUtils.showToast(fileTable, "Backup ripristinato correttamente");
+            showRestoreExportDialog();
             loadTable();
             loadFiles();
             updateVaultStats();
@@ -586,7 +608,7 @@ public class MainController {
 
         task.setOnSucceeded(e -> {
             clearProgressUI();
-            UIUtils.showToast(fileTable, "Backup esportato correttamente");
+            showBackupExportDialog(outputFile);
             currentFileTask = null;
         });
 
@@ -608,24 +630,27 @@ public class MainController {
         th.start();
     }
 
-    private static final long INACTIVITY_TIMEOUT_MS = 3 * 60_000; // 3 minuti
+    private static final long INACTIVITY_TIMEOUT_MS = 3 * 60000L; // 3 minuti
     private javafx.animation.Timeline inactivityTimer;
     private boolean locked = false;
     @FXML
     private void initialize() {
-        System.out.println("FXML inizializzato.");
+// ----- SEARCH -----
+        searchTextField.textProperty().addListener((obs, oldV, newV) -> {
+            applySearchFilter(newV);
+        });
 
-        System.out.println("mainRoot = " + mainRoot);
+// ----- HOME BUTTON -----
+        homeButton.setOnAction(e -> {
+            searchTextField.clear();
+            applySearchFilter("");
+        });
         unlockButton.setOnAction(e -> unlockScreen(unlockPasswordField.getText().toCharArray()));
 
         unlockPasswordField.setOnAction(e ->
                 unlockScreen(unlockPasswordField.getText().toCharArray()));
 
 
-    }
-
-    private void handleAutoLogout() {
-        lockScreen();         // NON chiudiamo il vault, solo blocchiamo
     }
 
 
@@ -665,6 +690,7 @@ public class MainController {
             unlockPasswordField.clear();
             unlockErrorLabel.setText("");
             lockPane.setDisable(true);
+            appRoot.setEffect(null);
 
             appRoot.setDisable(false);
             // reset timer inattività
@@ -678,34 +704,57 @@ public class MainController {
     private void lockScreen() {
         locked = true;
 
+        List<Window> windows = new ArrayList<>(Window.getWindows());
+        for (Window w : windows) {
+            if (w instanceof Stage stage) {
+                if (!stage.equals(mainRoot.getScene().getWindow())) {
+                    stage.close();
+                }
+            }
+        }
+
+        // Effetto blur su tutto il contenuto
+        GaussianBlur blur = new GaussianBlur(25);
+        appRoot.setEffect(blur);
+
+        // Overlay "tenda" scura
+        lockPane.setStyle("-fx-background-color: rgba(0,0,0,0.60);");
+
         lockPane.setVisible(true);
         lockPane.setDisable(false);
 
         unlockPasswordField.clear();
         unlockErrorLabel.setText("");
 
-        appRoot.setDisable(true);   // Disabilita UI principale
+        appRoot.setDisable(true);
     }
     @FXML private StackPane mainRoot;
 
 
-    @FXML
-    private void handleBackup() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Esporta backup cifrato");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Backup Safebox (*.sbx)", "*.sbx"));
-        File output = chooser.showSaveDialog(fileTable.getScene().getWindow());
 
-        if (output == null)
-            return;
+    private void showRestoreExportDialog() {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Ripristino effettuato");
+        alert.setHeaderText("Ripristino dati OK");
 
-        try {
-            exportEncryptedBackup(output);
-            showToast(fileTable,"Backup esportato correttamente in:\n" + output.getAbsolutePath());
-        } catch (Exception e) {
-            e.printStackTrace();
-            showError("Errore durante il backup: " + e.getMessage());
-        }
+        alert.setContentText("Ripristino dati avvenuto correttamente");
+        // opzionale: finestra sopra tutte
+        Stage stage = (Stage) fileTable.getScene().getWindow();
+        alert.initOwner(stage);
+
+        alert.showAndWait();
+    }
+    private void showBackupExportDialog(File output) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Backup esportato");
+        alert.setHeaderText("Backup esportato correttamente");
+        alert.setContentText("Percorso del file:\n" + output.getAbsolutePath());
+
+        // opzionale: finestra sopra tutte
+        Stage stage = (Stage) fileTable.getScene().getWindow();
+        alert.initOwner(stage);
+
+        alert.showAndWait();
     }
 
     private void registerSceneActivity(Scene scene) {
@@ -719,7 +768,8 @@ public class MainController {
     private Task currentFileTask;
 
     public void init(VaultContext context) {
-
+        tableEntries.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        fileTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         Scene scene = mainRoot.getScene();
         if (scene != null) {
             registerSceneActivity(scene);
@@ -737,12 +787,82 @@ public class MainController {
         noteColumn.setCellValueFactory(new PropertyValueFactory<>("notes"));
         tableEntries.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
+
+        noteColumn.setCellFactory(col -> new TableCell<SecretEntry, String>() {
+            private final Label lbl = new Label();
+
+            {
+                lbl.setWrapText(false);
+                lbl.setMaxHeight(Double.MAX_VALUE);
+            }
+
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                } else {
+                    lbl.setText(item);
+                    setGraphic(lbl);
+
+                    setPrefHeight(24);
+                    setMinHeight(24);
+                    setMaxHeight(24);
+                }
+            }
+        });
+
+
+
+
+
+
         loadTable();
 
         // file table
         fileNameColumn.setCellValueFactory(new PropertyValueFactory<>("filename"));
         fileTypeColumn.setCellValueFactory(new PropertyValueFactory<>("mimeType"));
         fileSizeColumn.setCellValueFactory(new PropertyValueFactory<>("size"));
+
+        // === FORMATTER DATE addTime / lastEdit ===
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        fileAddTimeColumn.setCellValueFactory(new PropertyValueFactory<>("addTime"));
+        fileLastEditColumn.setCellValueFactory(new PropertyValueFactory<>("lastEdit"));
+
+        fileAddTimeColumn.setCellFactory(col -> new TableCell<SecretFile, Number>() {
+            @Override
+            protected void updateItem(Number item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null || ((long)item) == 0) {
+                    setText(null);
+                } else {
+                    setText(Instant.ofEpochMilli(item.longValue())
+                            .atZone(ZoneId.systemDefault())
+                            .format(dtf));
+                }
+            }
+        });
+
+        fileLastEditColumn.setCellFactory(col -> new TableCell<SecretFile, Number>() {
+            @Override
+            protected void updateItem(Number item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null || ((long)item) == 0) {
+                    setText(null);
+                } else {
+                    setText(Instant.ofEpochMilli(item.longValue())
+                            .atZone(ZoneId.systemDefault())
+                            .format(dtf));
+                }
+            }
+        });
+
+
+
+
+
+
 
         // formatter per dimensioni leggibili
         fileSizeColumn.setCellFactory(col -> new TableCell<SecretFile, Number>() {
@@ -757,7 +877,20 @@ public class MainController {
             }
         });
 
-        fileTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        //fileTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+
+        fileNameColumn.setPrefWidth(250);
+        fileSizeColumn.setPrefWidth(120);
+        fileTypeColumn.setPrefWidth(150);
+        fileLastEditColumn.setPrefWidth(160);
+        fileAddTimeColumn.setPrefWidth(160);
+
+// Evita che le colonne collassino
+        fileNameColumn.setMinWidth(150);
+        fileSizeColumn.setMinWidth(100);
+        fileTypeColumn.setMinWidth(120);
+        fileLastEditColumn.setMinWidth(140);
+        fileAddTimeColumn.setMinWidth(140);
 
         loadFiles();
 
@@ -820,15 +953,28 @@ public class MainController {
 
 
 
-    private void resetInactivityTimer() {
+    protected void resetInactivityTimer() {
         if (locked) return;
         remainingMillis.set(INACTIVITY_TIMEOUT_MS);
         startInactivityTimer(); // <-- ricarica entrambi i timer in modo pulito
     }
 
     private void registerActivityListeners() {
-        mainRoot.addEventFilter(javafx.scene.input.MouseEvent.ANY, e -> resetInactivityTimer());
-        mainRoot.addEventFilter(javafx.scene.input.KeyEvent.ANY, e -> resetInactivityTimer());
+        // Listener globale per tutto il runtime JavaFX
+        EventHandler<Event> globalActivityListener = e -> resetInactivityTimer();
+
+        // Intercetta mouse e tastiera OVUNQUE
+        Toolkit.getDefaultToolkit().addAWTEventListener(
+                event -> resetInactivityTimer(),
+                AWTEvent.MOUSE_EVENT_MASK | AWTEvent.KEY_EVENT_MASK
+        );
+
+        // Intercetta eventi JavaFX (senza limitarsi a mainRoot)
+        Scene scene = mainRoot.getScene();
+        if (scene != null) {
+            scene.addEventFilter(MouseEvent.ANY, globalActivityListener);
+            scene.addEventFilter(KeyEvent.ANY, globalActivityListener);
+        }
     }
 
     private final AtomicLong remainingMillis = new AtomicLong(INACTIVITY_TIMEOUT_MS);
@@ -860,58 +1006,74 @@ public class MainController {
         inactivityTimer.playFromStart();
         countdownTimer.playFromStart();
     }
-
-
-
     private void loadFiles() {
 
         ObservableList<SecretFile> data = FXCollections.observableArrayList();
-
         Path vaultFile = context.getVaultPath();
-        Path vaultDir  = (vaultFile != null) ? vaultFile.getParent() : null;
-
+        Path vaultDir = (vaultFile != null) ? vaultFile.getParent() : null;
 
         Iterator<SecretFile> iter = context.getVault().getFiles().iterator();
 
-       while(iter.hasNext()){
-           var e = iter.next();
+        while (iter.hasNext()) {
+            SecretFile e = iter.next();
             try {
-
-                 String encPath = e.getEncryptedPath();
+                String encPath = e.getEncryptedPath();
                 if (encPath != null && !encPath.isBlank() && vaultDir != null) {
-
                     Path filePath = vaultDir.resolve(encPath);
 
                     if (Files.exists(filePath)) {
                         e.setSize(Files.size(filePath));
-
                         if (e.getMimeType() == null || e.getMimeType().isBlank() || e.getMimeType().equals("?")) {
                             e.setMimeType(guessMimeFromName(e.getFilename()));
                         }
-
                         data.add(e);
                     } else {
                         iter.remove();
-                       System.err.println("Rimosso dal Vault file mancante nel filesystem: " + filePath);
                     }
-
-
-                }else{
-                    //
-                    // --- Nessun dato disponibile
-                    //
-                    System.err.println("File ignorato (né dataBase64 né encryptedPath): " + e.getFilename());
                 }
-
-
-
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
-        };
+        }
 
-        fileTable.setItems(data);
+        fullFiles.setAll(data);
+        fileTable.setItems(FXCollections.observableArrayList(fullFiles));
     }
+
+    private void applySearchFilter(String text) {
+
+        if (text == null || text.isBlank()) {
+            tableEntries.setItems(FXCollections.observableArrayList(fullEntries));
+            fileTable.setItems(FXCollections.observableArrayList(fullFiles));
+            return;
+        }
+
+        String lower = text.toLowerCase();
+
+        // tab attivo
+        int tabIndex = mainTabs.getSelectionModel().getSelectedIndex();
+
+        if (tabIndex == 0) { // PASSWORD
+            ObservableList<SecretEntry> filtered =
+                    fullEntries.filtered(e ->
+                            e.getTitle().toLowerCase().contains(lower)
+                                    || e.getUsername().toLowerCase().contains(lower)
+                                    || e.getCategory().toLowerCase().contains(lower)
+                                    || e.getNotes().toLowerCase().contains(lower)
+                    );
+
+            tableEntries.setItems(filtered);
+        } else { // FILE
+            ObservableList<SecretFile> filtered =
+                    fullFiles.filtered(f ->
+                            f.getFilename().toLowerCase().contains(lower)
+                                    || f.getMimeType().toLowerCase().contains(lower)
+                    );
+
+            fileTable.setItems(filtered);
+        }
+    }
+
 
 
     private String guessMimeFromName(String name) {
@@ -923,18 +1085,16 @@ public class MainController {
     }
 
     private void loadTable() {
-        ObservableList<SecretEntry> data =
-                FXCollections.observableArrayList(context.getVault().getEntries());
+        fullEntries.setAll(context.getVault().getEntries());
+        tableEntries.setItems(FXCollections.observableArrayList(fullEntries));
 
-        tableEntries.setItems(data);
         tableEntries.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-
         updateVaultStats();
     }
 
+
+
     // formatter dimensioni file
-
-
     private static String formatEta(double seconds) {
         if (seconds <= 0) {
             return "calcolo in corso";
@@ -968,7 +1128,7 @@ public class MainController {
             Parent root = loader.load();
 
             EntryEditController controller = loader.getController();
-
+            controller.setMainController(this);
             // Passiamo un callback che verrà chiamato quando l'entry è salvata
             controller.init(selected, () -> {
                 try {
@@ -988,6 +1148,8 @@ public class MainController {
             stage.setScene(new Scene(root));
             stage.initModality(Modality.APPLICATION_MODAL);
             stage.setResizable(false);
+            stage.addEventFilter(MouseEvent.ANY, e -> resetInactivityTimer());
+            stage.addEventFilter(KeyEvent.ANY, e -> resetInactivityTimer());
             stage.showAndWait();
 
         } catch (Exception e) {
@@ -1009,7 +1171,9 @@ public class MainController {
             dialog.setResizable(false);
 
             AddEntryController ctrl = loader.getController();
-
+            ctrl.setMainController(this);
+            dialog.addEventFilter(MouseEvent.ANY, e -> resetInactivityTimer());
+            dialog.addEventFilter(KeyEvent.ANY, e -> resetInactivityTimer());
             dialog.showAndWait();
 
             if (ctrl.isSaved()) {
@@ -1187,6 +1351,8 @@ public class MainController {
             sf.setEncryptedPath("files/" + id + ".enc");
             sf.setIv(Base64.getEncoder().encodeToString(iv));
             sf.setSize(file.length());
+            sf.setAddTime(System.currentTimeMillis());
+
 
             context.getVault().getFiles().add(sf);
             try {
@@ -1309,10 +1475,23 @@ public class MainController {
         prepareProgressUi();
         fileProgressBar.progressProperty().bind(task.progressProperty());
 
+
+
         task.setOnSucceeded(e -> {
             resetProgressUi();
             try {
+                // Apri il file in chiaro
                 Desktop.getDesktop().open(temp.toFile());
+
+                // === AGGIORNA LA DATA DI ULTIMO ACCESSO ===
+                sf.setLastEdit(System.currentTimeMillis());
+
+                // Salva vault aggiornato
+                repository.saveVaultV2(context, context.getVault());
+
+                // Aggiorna la tabella a video
+                fileTable.refresh();
+
             } catch (Exception ex) {
                 showError("Errore durante l'apertura del file");
             }
@@ -1417,6 +1596,8 @@ public class MainController {
 
             task.setOnSucceeded(e -> {
                 resetProgressUi();
+                selected.setLastEdit(System.currentTimeMillis());
+                fileTable.refresh();
                 UIUtils.showToast(fileTable, "File esportato");
                 currentFileTask = null;
             });
@@ -1443,21 +1624,28 @@ public class MainController {
             showError("Errore durante l'esportazione del file");
         }
     }
+    private void deleteEntries(){
+        List<SecretEntry> list = new ArrayList<>(tableEntries.getSelectionModel().getSelectedItems());
 
+        context.getVault().getEntries().removeAll(list);
+
+        try {
+            repository.saveVaultV2(context, context.getVault());
+            loadTable();
+            UIUtils.showToast(tableEntries, list.size() + " voci eliminate");
+        } catch (Exception e) {
+            e.printStackTrace();
+            showError("Errore durante il salvataggio del vault");
+        }
+    }
 
     @FXML
     private void handleDeleteEntry() {
 
-        SecretEntry selected = tableEntries.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            showError("Seleziona una voce da eliminare.");
-            return;
-        }
-
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Conferma eliminazione");
-        confirm.setHeaderText("Vuoi eliminare definitivamente questa voce?");
-        confirm.setContentText("Titolo: " + selected.getTitle());
+        confirm.setHeaderText("Vuoi eliminare definitivamente le voci selezionate?");
+        confirm.setContentText("Elimina Voci");
 
         ButtonType yes = new ButtonType("Elimina", ButtonBar.ButtonData.OK_DONE);
         ButtonType no = new ButtonType("Annulla", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -1467,33 +1655,50 @@ public class MainController {
 
         confirm.showAndWait().ifPresent(response -> {
             if (response == yes) {
-                context.getVault().remove(selected);
-
-                try {
-                    repository.saveVaultV2(context, context.getVault());
-                    loadTable();      // aggiorna la tabella
-                    UIUtils.showToast(tableEntries, "Voce eliminata");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    showError("Errore durante il salvataggio del vault");
-                }
+                deleteEntries();
             }
         });
     }
 
 
+    private void deleteFiles() throws Exception {
+        List<SecretFile> toDelete = new ArrayList<>(fileTable.getSelectionModel().getSelectedItems());
+        Path vaultDir = context.getVaultPath().getParent();
+
+        for (SecretFile sf : toDelete) {
+            try {
+                Path encryptedPath = vaultDir.resolve(sf.getEncryptedPath());
+                if (Files.exists(encryptedPath)) {
+                    Files.delete(encryptedPath);
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                // continuiamo comunque con gli altri
+            }
+        }
+
+// rimuovi dal vault
+        context.getVault().getFiles().removeAll(toDelete);
+
+// salva vault
+        repository.saveVaultV2(context, context.getVault());
+
+// aggiorna UI
+        loadFiles();
+        updateVaultStats();
+
+        showToast(fileTable, toDelete.size() + " file eliminati");
+    }
+
+
     @FXML
     private void handleDeleteFile() {
-        SecretFile selected = fileTable.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            showError("Seleziona un file da eliminare.");
-            return;
-        }
+
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Conferma eliminazione file");
-        confirm.setHeaderText("Vuoi eliminare questo file dal vault?");
-        confirm.setContentText(selected.getFilename());
+        confirm.setHeaderText("Vuoi eliminare questi file dal vault?");
+        confirm.setContentText("eliminazione files dal vault");
 
         ButtonType yes = new ButtonType("Elimina", ButtonBar.ButtonData.OK_DONE);
         ButtonType no  = new ButtonType("Annulla", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -1503,34 +1708,12 @@ public class MainController {
         confirm.showAndWait().ifPresent(response -> {
             if (response == yes) {
                 try {
-                    // 1) elimina il file cifrato dal filesystem (se esiste)
-                    Path vaultDir      = context.getVaultPath().getParent(); // directory /vaults
-                    Path encryptedPath = vaultDir.resolve(selected.getEncryptedPath());
+                    // 1) elimina i fiels  cifrato dal filesystem (se esiste)
+                    deleteFiles();
 
-                    if (Files.exists(encryptedPath)) {
-                        try {
-                            Files.delete(encryptedPath);
-                        } catch (Exception ex) {
-                            ex.printStackTrace();
-                            showError("Impossibile eliminare il file cifrato dal disco.");
-                            // continuo comunque a togliere il record dal vault
-                        }
-                    }
-
-                    // 2) rimuovi dal vault
-                    context.getVault().getFiles().remove(selected);
-
-                    // 3) salva vault aggiornato
-                    repository.saveVaultV2(context, context.getVault());
-
-                    // 4) aggiorna tabella + label
-                    loadFiles();
-                    updateVaultStats();
-
-                    showToast(fileTable, "File eliminato");
                 } catch (Exception e) {
                     e.printStackTrace();
-                    showToast(fileTable, "Errore nel salvataggio del vault");
+                    showToast(fileTable, "Errore eliminazione file dal vault");
                 }
             }
         });

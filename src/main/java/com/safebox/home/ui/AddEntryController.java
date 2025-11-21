@@ -2,11 +2,19 @@ package com.safebox.home.ui;
 
 import com.safebox.home.model.SecretEntry;
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.stage.Stage;
 import lombok.Getter;
+import lombok.Setter;
+
+import static com.safebox.home.util.UIUtils.showToast;
 
 public class AddEntryController {
 
@@ -39,7 +47,24 @@ public class AddEntryController {
         passwordTextField.textProperty().addListener((o, oldV, newV) -> updatePasswordStrength(newV));
     }
 
+    public void handleCopyPassword(ActionEvent event) {
 
+        String pwd = passwordTextField.isVisible() ? passwordTextField.getText() : passwordField.getText();;
+        if (pwd == null || pwd.isBlank()) {
+            return;
+        }
+
+        Clipboard clipboard = Clipboard.getSystemClipboard();
+        ClipboardContent content = new ClipboardContent();
+        content.putString(pwd);
+        clipboard.setContent(content);
+        showToast(passwordTextField,"La password è stata copiata negli appunti.");
+
+    }
+
+    @Setter
+    @Getter
+    private MainController mainController;
 
     public void handleOpenPasswordGenerator() {
         try {
@@ -56,7 +81,8 @@ public class AddEntryController {
 
             // Chiudi correttamente anche la X della finestra
             dialog.setOnCloseRequest(e -> dialog.close());
-
+            pane.addEventFilter(MouseEvent.ANY, e -> getMainController().resetInactivityTimer());
+            pane.addEventFilter(KeyEvent.ANY, e -> getMainController().resetInactivityTimer());
             dialog.showAndWait();
 
         } catch (Exception e) {

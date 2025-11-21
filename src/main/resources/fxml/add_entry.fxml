@@ -35,6 +35,11 @@
             </graphic>
 
         </Button>
+        <Button  onAction="#handleCopyPassword">
+            <graphic>
+                <FontAwesomeIconView   glyphName="PASTE" glyphSize="16"/>
+            </graphic>
+        </Button>
 
     </HBox>
 

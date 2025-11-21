@@ -1,126 +1,183 @@
 package com.safebox.home.ui;
 
-import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 
 import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-
 
 public class PasswordGeneratorController {
 
-    @FXML
-    private TextField generatedField;
+    // TAB 1 (Password Forte)
+    @FXML private TextField generatedPasswordField;
+    @FXML private Button copyButton;
     @FXML private Slider lengthSlider;
-    @FXML private Label lengthValue;
-    @FXML private CheckBox lowerCB, upperCB, digitsCB, symbolsCB;
-    @FXML private CheckBox reqUpper, reqDigit, reqSymbol;
+    @FXML private Label lengthLabel;
+    @FXML private CheckBox includeUpper;
+    @FXML private CheckBox includeLower;
+    @FXML private CheckBox includeDigits;
+    @FXML private CheckBox includeSymbols;
+    @FXML private CheckBox avoidAmbiguous;
     @FXML private ProgressBar strengthBar;
     @FXML private Label strengthLabel;
-    @FXML private Button generateButton, copyButton;
+    @FXML private Button generateButton;
 
-    private static final SecureRandom RAND = new SecureRandom();
+    // TAB 2 (Password Mnemonica)
+    @FXML private TextArea mnemonicOutput;
+    @FXML private Slider mnemonicSyllablesSlider;
+    @FXML private Label mnemonicSyllablesLabel;
+    @FXML private CheckBox mnemonicIncludeDigits;
+    @FXML private ProgressBar mnemonicStrengthBar;
+    @FXML private Label mnemonicStrengthLabel;
+    @FXML private Button generateMnemonicButton;
+
+    private final SecureRandom random = new SecureRandom();
 
     @FXML
-    private void initialize() {
+    public void initialize() {
 
-        lengthSlider.valueProperty().addListener((obs, oldV, newV) -> {
-            int len = newV.intValue();
-            lengthValue.setText(String.valueOf(len));
-        });
+        // Slider lunghezza
+        lengthLabel.setText(String.valueOf((int) lengthSlider.getValue()));
+        lengthSlider.valueProperty().addListener((obs, o, n) ->
+                lengthLabel.setText(String.valueOf(n.intValue()))
+        );
 
-        generateButton.setOnAction(e -> generate());
-        copyButton.setOnAction(e -> copyToClipboard());
+        // Slider sillabe mnemoniche
+        mnemonicSyllablesSlider.valueProperty().addListener((obs, o, n) ->
+                mnemonicSyllablesLabel.setText(String.valueOf(n.intValue()))
+        );
 
-        generate(); // prima generazione
+        // Generazione iniziale
+        handleGenerate();
+        handleGenerateMnemonic();
+
+        generateButton.setOnAction(e -> handleGenerate());
+        generateMnemonicButton.setOnAction(e -> handleGenerateMnemonic());
     }
 
-    private void generate() {
-
+    // ========= PASSWORD FORTE ========= //
+    @FXML
+    private void handleGenerate() {
         int length = (int) lengthSlider.getValue();
-        String lower = "abcdefghijklmnopqrstuvwxyz";
-        String upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        String digits = "0123456789";
-        String symbols = "!@#$%^&*()_-+=[]{}|;:,.<>?";
 
-        StringBuilder pool = new StringBuilder();
+        String upper = includeUpper.isSelected() ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" : "";
+        String lower = includeLower.isSelected() ? "abcdefghijklmnopqrstuvwxyz" : "";
+        String digits = includeDigits.isSelected() ? "0123456789" : "";
+        String symbols = includeSymbols.isSelected() ? "!@#$%^&*(){}[]?/+=-" : "";
 
-        if (lowerCB.isSelected()) pool.append(lower);
-        if (upperCB.isSelected()) pool.append(upper);
-        if (digitsCB.isSelected()) pool.append(digits);
-        if (symbolsCB.isSelected()) pool.append(symbols);
+        String all = upper + lower + digits + symbols;
 
-        if (pool.length() == 0) {
-            generatedField.setText("");
+        if (avoidAmbiguous.isSelected()) {
+            all = all.replaceAll("[O0Il1]", "");
+        }
+
+        if (all.isEmpty()) {
+            generatedPasswordField.setText("Seleziona almeno un set di caratteri");
             return;
         }
 
-        StringBuilder result = new StringBuilder();
-
-        // Applica regole obbligatorie
-        if (reqUpper.isSelected()) result.append(randomChar(upper));
-        if (reqDigit.isSelected()) result.append(randomChar(digits));
-        if (reqSymbol.isSelected()) result.append(randomChar(symbols));
-
-        // Aggiunge caratteri casuali fino a lunghezza
-        while (result.length() < length) {
-            result.append(pool.charAt(RAND.nextInt(pool.length())));
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            sb.append(all.charAt(random.nextInt(all.length())));
         }
 
-        // Shuffle finale
-        List<Character> chars = new ArrayList<>();
-        for (char c : result.toString().toCharArray()) chars.add(c);
-        Collections.shuffle(chars);
-        String finalPass = chars.stream()
-                .collect(StringBuilder::new, StringBuilder::append, StringBuilder::append)
-                .toString();
-
-        generatedField.setText(finalPass);
-        updateStrength(finalPass);
+        String pwd = sb.toString();
+        generatedPasswordField.setText(pwd);
+        updateStrengthBar(pwd, strengthBar, strengthLabel);
     }
 
-    private char randomChar(String s) {
-        return s.charAt(RAND.nextInt(s.length()));
-    }
-
-    private void updateStrength(String pass) {
-        int score = 0;
-
-        if (pass.length() >= 12) score++;
-        if (pass.length() >= 20) score++;
-        if (pass.matches(".*[A-Z].*")) score++;
-        if (pass.matches(".*[a-z].*")) score++;
-        if (pass.matches(".*\\d.*")) score++;
-        if (pass.matches(".*[!@#$%^&*()_\\-+=\\[\\]{}|;:,.<>?].*")) score++;
-
-        strengthBar.setProgress(score / 6.0);
-
-        if (score <= 2) strengthLabel.setText("Qualità: Debole");
-        else if (score <= 4) strengthLabel.setText("Qualità: Media");
-        else strengthLabel.setText("Qualità: Forte");
-    }
-
-    private void copyToClipboard() {
-        String text = generatedField.getText();
+    @FXML
+    private void handleCopy() {
+        String text = generatedPasswordField.getText();
         if (text.isEmpty()) return;
 
-        final Clipboard clipboard = Clipboard.getSystemClipboard();
-        ClipboardContent content = new ClipboardContent();
-        content.putString(text);
-        clipboard.setContent(content);
+        ClipboardContent cc = new ClipboardContent();
+        cc.putString(text);
+        Clipboard.getSystemClipboard().setContent(cc);
+    }
 
-        copyButton.setText("Copiato");
-        Platform.runLater(() -> {
-            new Thread(() -> {
-                try { Thread.sleep(1500); } catch (Exception ignored) {}
-                Platform.runLater(() -> copyButton.setText(""));
-            }).start();
-        });
+    // ========= PASSWORD MNEMONICA ========= //
+    @FXML
+    private void handleGenerateMnemonic() {
+
+        int syllables = (int) mnemonicSyllablesSlider.getValue();
+
+        // Cluster più naturali
+        final String[] consonants = {
+                "b","c","d","f","g","h","k","l","m","n",
+                "p","r","s","t","v","z",
+                "br","cr","dr","fr","gr","kr","pr","tr","vr",
+                "st","sk","sp","str"
+        };
+
+        final String[] vowels = {"a","e","i","o","u"};
+
+        // Pattern fonetici variabili: CV | CVC | VC
+        final int[] patterns = {0, 1, 2};
+
+        StringBuilder sb = new StringBuilder(syllables * 3 + 4);
+
+        for (int i = 0; i < syllables; i++) {
+            int pattern = patterns[random.nextInt(patterns.length)];
+
+            switch (pattern) {
+                case 0: // CV
+                    sb.append(consonants[random.nextInt(consonants.length)]);
+                    sb.append(vowels[random.nextInt(vowels.length)]);
+                    break;
+
+                case 1: // CVC
+                    sb.append(consonants[random.nextInt(consonants.length)]);
+                    sb.append(vowels[random.nextInt(vowels.length)]);
+                    sb.append(consonants[random.nextInt(16)]); // solo consonanti singole finali
+                    break;
+
+                case 2: // VC
+                    sb.append(vowels[random.nextInt(vowels.length)]);
+                    sb.append(consonants[random.nextInt(consonants.length)]);
+                    break;
+            }
+        }
+
+        if (mnemonicIncludeDigits.isSelected()) {
+            sb.append(random.nextInt(10));
+        }
+
+        String pwd = sb.toString();
+        mnemonicOutput.setText(pwd);
+
+        updateStrengthBar(pwd, mnemonicStrengthBar, mnemonicStrengthLabel);
+    }
+
+
+    // ========= VALUTAZIONE FORZA ========= //
+
+    private void updateStrengthBar(String pwd, ProgressBar bar, Label label) {
+        if (pwd == null || pwd.isEmpty()) {
+            bar.setProgress(0);
+            label.setText("Forza password: -");
+            return;
+        }
+
+        int score = 0;
+        if (pwd.length() >= 12) score++;
+        if (pwd.matches(".*[A-Z].*")) score++;
+        if (pwd.matches(".*[a-z].*")) score++;
+        if (pwd.matches(".*[0-9].*")) score++;
+        if (pwd.matches(".*[^A-Za-z0-9].*")) score++;
+
+        double progress = score / 5.0;
+
+        bar.setProgress(progress);
+
+        String text =
+                (score <= 1) ? "Debole" :
+                        (score == 2) ? "Mediocre" :
+                                (score == 3) ? "Buona" :
+                                        (score == 4) ? "Forte" :
+                                                "Molto forte";
+
+        label.setText("Forza password: " + text);
     }
 }

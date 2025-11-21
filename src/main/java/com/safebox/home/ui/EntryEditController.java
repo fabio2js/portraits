@@ -8,7 +8,11 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.stage.Stage;
+import lombok.Getter;
+import lombok.Setter;
 
 import static com.safebox.home.util.UIUtils.showToast;
 
@@ -27,11 +31,16 @@ public class EntryEditController {
 
     @FXML private ProgressBar passwordStrengthBar;
     @FXML private Label passwordStrengthLabel;
+    @FXML private ComboBox<String> categoryBox;
 
     private boolean secretVisible = false;
 
     private SecretEntry entry;
     private Runnable onSaveCallback;
+
+    @Setter
+    @Getter
+    private MainController mainController;
 
     private void updatePasswordStrength(String pwd) {
         int score = calculatePasswordStrength(pwd);
@@ -92,7 +101,8 @@ public class EntryEditController {
 
             // Chiudi correttamente anche la X della finestra
             dialog.setOnCloseRequest(e -> dialog.close());
-
+            pane.addEventFilter(MouseEvent.ANY, e -> getMainController().resetInactivityTimer());
+            pane.addEventFilter(KeyEvent.ANY, e -> getMainController().resetInactivityTimer());
             dialog.showAndWait();
 
         } catch (Exception e) {
@@ -103,7 +113,8 @@ public class EntryEditController {
     public void init(SecretEntry entry, Runnable onSaveCallback) {
         this.entry = entry;
         this.onSaveCallback = onSaveCallback;
-
+        categoryBox.getItems().addAll("Password", "Note", "Altro");
+        categoryBox.getSelectionModel().select(entry.getCategory());
         titleField.setText(entry.getTitle());
         usernameField.setText(entry.getUsername());
         secretVisibleField.setText(entry.getPassword());
@@ -174,7 +185,7 @@ public class EntryEditController {
         String secret = secretVisible ? secretVisibleField.getText() : secretField.getText();
         entry.setPassword(secret);
 
-
+        entry.setCategory(categoryBox.getSelectionModel().getSelectedItem());
         entry.setTitle(titleField.getText());
         entry.setUsername(usernameField.getText());
         entry.setNotes(notesField.getText());

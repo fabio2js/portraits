@@ -3,6 +3,8 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+
+<?import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView?>
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
       fx:controller="com.safebox.home.ui.LoginController"
@@ -17,21 +19,45 @@
            style="-fx-font-size: 22; -fx-font-weight: bold;"/>
 
     <Label wrapText="true"
-           maxWidth="320"
+           maxWidth="400"
            textAlignment="CENTER"
            style="-fx-font-size: 12; -fx-text-fill: #444;">
         <text>
             Inserisci la tua Master Password.
-            Se è il primo avvio, scegli una nuova password e premi "Crea nuovo vault".
-            Se hai già un vault, digita la password e premi "Apri vault".
+            Se è il primo avvio, digita una nuova password e premi "Crea nuovo vault".
+            Altrimenti digita la password e premi "Apri vault".
             La Master Password non può essere recuperata.
         </text>
     </Label>
 
+    <HBox spacing="5" alignment="CENTER" minWidth="555" >
 
-    <PasswordField fx:id="masterPasswordField"
-                   promptText="Master password"/>
+        <PasswordField fx:id="masterPasswordField"  HBox.hgrow="ALWAYS" promptText="Master password"   prefWidth="180"     minWidth="180"  style="-fx-font-size: 14px;"/>
+        <TextField fx:id="secretVisibleField" HBox.hgrow="ALWAYS" promptText="Master password" visible="false" managed="false" style="-fx-font-size: 14px;"/>
 
+        <Button   onAction="#handleOpenPasswordGenerator">
+            <graphic>
+                <FontAwesomeIconView  glyphName="MAGIC" glyphSize="16"/>
+            </graphic>
+        </Button>
+
+        <Button fx:id="toggleSecretButton" onAction="#handleToggleSecret">
+            <graphic>
+                <FontAwesomeIconView fx:id="toggleIcon" glyphName="EYE" glyphSize="16"/>
+            </graphic>
+        </Button>
+    </HBox>
+
+    <!-- Meter forza password -->
+    <VBox spacing="4" prefWidth="320" alignment="CENTER">
+        <ProgressBar fx:id="passwordStrengthBar"
+                     prefWidth="280"
+                     progress="0.0"  HBox.hgrow="ALWAYS" />
+
+        <Label fx:id="passwordStrengthLabel"
+               text="Forza password: vuota"
+               style="-fx-font-size: 11; -fx-text-fill: #444; " HBox.hgrow="ALWAYS"  />
+    </VBox>
     <HBox spacing="10" alignment="CENTER">
         <Button fx:id="openVaultButton"  text="Apri vault"
                 onAction="#handleOpenVault"

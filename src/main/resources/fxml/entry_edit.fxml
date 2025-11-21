@@ -29,8 +29,13 @@
             <graphic>
                 <FontAwesomeIconView fx:id="genPassword" glyphName="MAGIC" glyphSize="16"/>
             </graphic>
-
         </Button>
+        <Button  onAction="#handleCopyPassword">
+            <graphic>
+                <FontAwesomeIconView   glyphName="PASTE" glyphSize="16"/>
+            </graphic>
+        </Button>
+
     </HBox>
     <Label text="Forza password:" style="-fx-font-size: 12;" />
 
@@ -43,12 +48,15 @@
            text="Debole"
            style="-fx-font-size: 12; -fx-text-fill: #666;" />
     <TextArea fx:id="notesField" promptText="Note" prefRowCount="4"/>
+
     <HBox spacing="10">
-         <Button text="📋" onAction="#handleCopyPassword"/>
+        <Label text="Categoria:"/>
+        <ComboBox fx:id="categoryBox"
+                  prefWidth="180"/>
     </HBox>
-    <HBox spacing="10">
-        <Button text="Salva" onAction="#handleSave"/>
+    <HBox spacing="10" alignment="CENTER_RIGHT">
         <Button text="Annulla" onAction="#handleCancel"/>
+        <Button text="Salva" onAction="#handleSave"/>
     </HBox>
 
 </VBox>

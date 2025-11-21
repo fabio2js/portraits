@@ -29,12 +29,38 @@
         <!-- CONTENT -->
         <center>
             <VBox spacing="15" style="-fx-padding: 20;">
+                <HBox spacing="15" alignment="CENTER_LEFT">
 
-                <Label fx:id="infoLabel"
-                       style="-fx-font-size: 14; -fx-text-fill: #555;"/>
+                    <!-- Label a sinistra -->
+                    <Label fx:id="infoLabel"
+                           style="-fx-font-size: 14; -fx-text-fill: #555;"/>
 
-                <Label fx:id="vaultStatsLabel"
-                       style="-fx-text-fill: #444; -fx-font-size: 13; -fx-font-weight: bold;" />
+                    <!-- Spacer che spinge tutto a destra -->
+                    <Region HBox.hgrow="ALWAYS" />
+
+                    <!-- Barra di ricerca a destra -->
+                    <HBox spacing="10" alignment="CENTER_RIGHT">
+
+
+
+                        <Button fx:id="homeButton">
+                            <graphic>
+                                <FontAwesomeIconView glyphName="HOME" glyphSize="14"/>
+                            </graphic>
+                        </Button>
+                        <Button>
+                            <graphic>
+                                <FontAwesomeIconView glyphName="SEARCH" glyphSize="14"/>
+                            </graphic>
+                        </Button>
+
+                        <TextField fx:id="searchTextField"
+                                   promptText="Cerca…"
+                                   prefWidth="200"/>
+                    </HBox>
+
+                </HBox>
+
 
                 <TabPane fx:id="mainTabs" tabClosingPolicy="UNAVAILABLE">
                     <tabs>
@@ -86,6 +112,8 @@
                                         <TableColumn fx:id="fileNameColumn" text="Nome file"/>
                                         <TableColumn fx:id="fileSizeColumn" text="Dimensione"/>
                                         <TableColumn fx:id="fileTypeColumn" text="Tipo"/>
+                                        <TableColumn fx:id="fileLastEditColumn" text="Ultimo accesso"/>
+                                        <TableColumn fx:id="fileAddTimeColumn" text="Inserito"/>
                                     </columns>
                                 </TableView>
 
