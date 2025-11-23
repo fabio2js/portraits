@@ -1,4 +1,4 @@
-package com.safebox.home.crypto;
+package com.onecritto.home.crypto;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;

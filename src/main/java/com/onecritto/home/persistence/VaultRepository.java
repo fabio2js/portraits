@@ -1,9 +1,9 @@
-package com.safebox.home.persistence;
+package com.onecritto.home.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.safebox.home.service.VaultContext;
-import com.safebox.home.crypto.CryptoService;
-import com.safebox.home.model.Vault;
+import com.onecritto.home.service.VaultContext;
+import com.onecritto.home.crypto.CryptoService;
+import com.onecritto.home.model.Vault;
 import lombok.Data;
 
 import javax.crypto.SecretKey;

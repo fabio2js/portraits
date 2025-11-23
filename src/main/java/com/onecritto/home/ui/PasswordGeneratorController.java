@@ -1,4 +1,4 @@
-package com.safebox.home.ui;
+package com.onecritto.home.ui;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -6,6 +6,8 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 
 import java.security.SecureRandom;
+
+import static com.onecritto.home.util.UIUtils.showToast;
 
 public class PasswordGeneratorController {
 
@@ -95,6 +97,7 @@ public class PasswordGeneratorController {
         ClipboardContent cc = new ClipboardContent();
         cc.putString(text);
         Clipboard.getSystemClipboard().setContent(cc);
+        showToast(generatedPasswordField,"La password è stata copiata negli appunti.");
     }
 
     // ========= PASSWORD MNEMONICA ========= //
@@ -157,6 +160,7 @@ public class PasswordGeneratorController {
         if (pwd == null || pwd.isEmpty()) {
             bar.setProgress(0);
             label.setText("Forza password: -");
+            bar.getStyleClass().removeIf(s -> s.startsWith("strength-"));
             return;
         }
 
@@ -168,7 +172,6 @@ public class PasswordGeneratorController {
         if (pwd.matches(".*[^A-Za-z0-9].*")) score++;
 
         double progress = score / 5.0;
-
         bar.setProgress(progress);
 
         String text =
@@ -179,5 +182,19 @@ public class PasswordGeneratorController {
                                                 "Molto forte";
 
         label.setText("Forza password: " + text);
+
+        // --- MODIFICA PUNTUALE ---
+        bar.getStyleClass().removeIf(s -> s.startsWith("strength-"));
+
+// Colori viola OneCritto, identici a quelli della master password
+        switch (score) {
+            case 0, 1 -> bar.setStyle("-fx-accent: #A300B8;");   // viola scuro
+            case 2 ->    bar.setStyle("-fx-accent: #C44CFF;");   // viola medio
+            case 3 ->    bar.setStyle("-fx-accent: #D48AFF;");   // viola chiaro
+            case 4 ->    bar.setStyle("-fx-accent: #B066FF;");   // viola brillante
+            case 5 ->    bar.setStyle("-fx-accent: #8C3AFF;");   // viola pieno OneCritto
+        }
+
     }
+
 }

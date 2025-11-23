@@ -1,16 +1,18 @@
-package com.safebox.home.ui;
+package com.onecritto.home.ui;
 
-import com.safebox.home.crypto.CryptoService;
-import com.safebox.home.model.Vault;
-import com.safebox.home.persistence.VaultFormatV2;
-import com.safebox.home.persistence.VaultRepository;
-import com.safebox.home.service.VaultContext;
+import com.onecritto.home.crypto.CryptoService;
+import com.onecritto.home.model.Vault;
+import com.onecritto.home.persistence.VaultFormatV2;
+import com.onecritto.home.persistence.VaultRepository;
+import com.onecritto.home.service.VaultContext;
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -20,9 +22,12 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 
 public class LoginController {
-
+    @FXML
+    public VBox rootContainer;
     @FXML
     private PasswordField masterPasswordField;
 
@@ -125,6 +130,10 @@ public class LoginController {
             Dialog<Void> dialog = new Dialog<>();
             dialog.setDialogPane(pane);
             dialog.setTitle("Generatore Password");
+            Stage dialogStage = (Stage) dialog.getDialogPane().getScene().getWindow();
+            dialogStage.getIcons().add(new Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+            ));
             dialog.initOwner(passwordStrengthLabel.getScene().getWindow());
 
             // Importante: senza pulsanti il Dialog NON si chiude!
@@ -169,10 +178,8 @@ public class LoginController {
         // --- Calcolo score ---
         int score = 0;
 
-        // Lunghezza: fino a 10 char → max 40 punti
         score += Math.min(10, length) * 4;
 
-        // Diversità: 4 categorie × 15 = 60
         int classes = 0;
         if (hasLower) classes++;
         if (hasUpper) classes++;
@@ -180,7 +187,6 @@ public class LoginController {
         if (hasSymbol) classes++;
         score += classes * 15;
 
-        // Bonus
         if (length >= 16 && classes >= 3) {
             score += 10;
         }
@@ -190,7 +196,7 @@ public class LoginController {
 
         if (score > 100) score = 100;
 
-        // --- Determina fascia (band) con if perché switch non supporta range ---
+        // --- Band ---
         int band;
         if (length == 0) {
             band = 0;
@@ -206,28 +212,16 @@ public class LoginController {
             band = 5;
         }
 
-        // --- Label con switch-case standard ---
+        // --- Label ---
         String labelText;
         switch (band) {
-            case 0:
-                labelText = "vuota";
-                break;
-            case 1:
-                labelText = "molto debole";
-                break;
-            case 2:
-                labelText = "debole";
-                break;
-            case 3:
-                labelText = "discreta";
-                break;
-            case 4:
-                labelText = "forte";
-                break;
-            case 5:
-            default:
-                labelText = "molto forte";
-                break;
+            case 0 -> labelText = "vuota";
+            case 1 -> labelText = "molto debole";
+            case 2 -> labelText = "debole";
+            case 3 -> labelText = "discreta";
+            case 4 -> labelText = "forte";
+            case 5 -> labelText = "molto forte";
+            default -> labelText = "vuota";
         }
 
         // --- Aggiornamento UI ---
@@ -236,13 +230,26 @@ public class LoginController {
         }
 
         if (passwordStrengthBar != null) {
+
             if (length == 0) {
                 passwordStrengthBar.setProgress(0.0);
             } else {
                 passwordStrengthBar.setProgress(score / 100.0);
             }
+
+            // =======================================================
+            //  AGGIUNTA PUNTUALE: COLORI VIOLA ONECRITTO
+            // =======================================================
+            switch (band) {
+                case 0, 1 -> passwordStrengthBar.setStyle("-fx-accent: #A300B8;");   // viola scuro
+                case 2 ->    passwordStrengthBar.setStyle("-fx-accent: #C44CFF;");   // viola medio
+                case 3 ->    passwordStrengthBar.setStyle("-fx-accent: #D48AFF;");   // viola chiaro
+                case 4 ->    passwordStrengthBar.setStyle("-fx-accent: #B066FF;");   // viola brillante
+                case 5 ->    passwordStrengthBar.setStyle("-fx-accent: #8C3AFF;");   // viola OneCritto pieno
+            }
         }
     }
+
 
 
 
@@ -263,14 +270,18 @@ public class LoginController {
                 return;
             }
 
-            // file chooser...
-            FileChooser chooser = new FileChooser();
-            chooser.setTitle("Seleziona il vault");
-            chooser.getExtensionFilters().add(
-                    new FileChooser.ExtensionFilter("Safebox Vault (*.vault)", "*.vault")
-            );
 
-            File file = chooser.showOpenDialog(masterPasswordField.getScene().getWindow());
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Apri OneCritto vault");
+            chooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("OneCritto (*.ocv)", "*.ocv")
+            );
+            Stage fcStage = (Stage) rootContainer.getScene().getWindow();
+            fcStage.getIcons().add(new javafx.scene.image.Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+            ));
+            File file = chooser.showOpenDialog(fcStage);
+
             if (file == null) return;
 
             Path vaultPath = file.toPath();
@@ -301,17 +312,19 @@ public class LoginController {
             return;
          }
 
-
-
-
 // 2) Scegli file vault
+
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Salva nuovo vault");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Safebox Vault (*.vault)", "*.vault"));
+        chooser.setTitle("Seleziona file  vault");
+        Stage fcStage = (Stage) rootContainer.getScene().getWindow();
+        fcStage.getIcons().add(new javafx.scene.image.Image(
+                Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+        ));
+        File file = chooser.showOpenDialog(fcStage);
 
-        File file = chooser.showSaveDialog(masterPasswordField.getScene().getWindow());
-        if (file == null) return;
 
+        if( file==null)
+        return;
 
         Path vaultPath = file.toPath();
         CryptoService cs = new CryptoService();
@@ -365,10 +378,14 @@ public class LoginController {
         Parent root = loader.load();
         Scene scene = new Scene(root);
 
-
+        scene.getStylesheets().add(
+                Objects.requireNonNull(getClass().getResource("/css/onecritto-theme.css")).toExternalForm()
+        );
         Stage stage = (Stage) masterPasswordField.getScene().getWindow();
 
-
+        stage.getIcons().add(new Image(
+                Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_256x256.png"))
+        ));
         stage.setScene(scene);
         stage.centerOnScreen();
         stage.show();

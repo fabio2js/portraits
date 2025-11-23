@@ -7,7 +7,7 @@
 <?import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView?>
 <VBox xmlns="http://javafx.com/javafx"
       xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.safebox.home.ui.AddEntryController"
+      fx:controller="com.onecritto.home.ui.AddEntryController"
       spacing="12"
       style="-fx-padding: 20;">
 

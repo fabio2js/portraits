@@ -6,8 +6,9 @@
 <?import de.jensd.fx.glyphs.fontawesome.FontAwesomeIcon?>
 <?import javafx.scene.image.ImageView?>
 
+<?import javafx.scene.image.Image?>
 <StackPane fx:id="mainRoot" xmlns:fx="http://javafx.com/fxml"
-           fx:controller="com.safebox.home.ui.MainController">
+           fx:controller="com.onecritto.home.ui.MainController">
 
     <!-- ================================================================= -->
     <!--                         UI PRINCIPALE                             -->
@@ -16,13 +17,16 @@
                 prefWidth="800"
                 prefHeight="600">
 
-
         <!-- HEADER -->
         <top>
-            <HBox spacing="15" alignment="CENTER_LEFT"
-                  style="-fx-padding: 18; -fx-background-color: linear-gradient(to right, #1c1c1c, #2d2d2d);">
-                <Label text="SafeBox Home"
-                       style="-fx-font-size: 22; -fx-font-weight: bold; -fx-text-fill: white;"/>
+            <HBox spacing="15" alignment="CENTER_LEFT" styleClass="header-bar">
+
+                <ImageView fitHeight="65" preserveRatio="true">
+                    <image>
+                        <Image url="@/icons/logo.png"/>
+                    </image>
+                </ImageView>
+
             </HBox>
         </top>
 
@@ -32,7 +36,8 @@
                 <HBox spacing="15" alignment="CENTER_LEFT">
 
                     <!-- Label a sinistra -->
-                    <Label fx:id="infoLabel"
+                    <Label fx:id="infoLabel"        styleClass="stats-label"
+
                            style="-fx-font-size: 14; -fx-text-fill: #555;"/>
 
                     <!-- Spacer che spinge tutto a destra -->
@@ -155,7 +160,7 @@
 
         <!-- FOOTER -->
         <bottom>
-            <VBox spacing="10" style="-fx-padding: 10;" alignment="CENTER">
+            <VBox spacing="15" style="-fx-padding: 10;" alignment="CENTER">
 
                 <HBox spacing="15" alignment="CENTER">
                     <Button text="Backup" onAction="#handleExportBackup">
@@ -228,7 +233,7 @@
           style="-fx-background-color: rgba(0,0,0,0.75);"
           StackPane.alignment="CENTER">
 
-        <Label text="🔒 SafeBox bloccato"
+        <Label text="🔒 OneCritto locked"
                style="-fx-text-fill: white; -fx-font-size: 26px;"/>
 
         <PasswordField fx:id="unlockPasswordField"

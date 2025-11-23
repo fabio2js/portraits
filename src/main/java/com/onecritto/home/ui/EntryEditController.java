@@ -1,11 +1,12 @@
-package com.safebox.home.ui;
+package com.onecritto.home.ui;
 
-import com.safebox.home.model.SecretEntry;
+import com.onecritto.home.model.SecretEntry;
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyEvent;
@@ -14,7 +15,9 @@ import javafx.stage.Stage;
 import lombok.Getter;
 import lombok.Setter;
 
-import static com.safebox.home.util.UIUtils.showToast;
+import java.util.Objects;
+
+import static com.onecritto.home.util.UIUtils.showToast;
 
 
 public class EntryEditController {
@@ -49,22 +52,23 @@ public class EntryEditController {
         passwordStrengthBar.setProgress(progress);
 
         if (score <= 1) {
-            passwordStrengthBar.setStyle("-fx-accent: #ff3b30;"); // rosso
+            passwordStrengthBar.setStyle("-fx-accent: #A300B8;"); // viola molto scuro (debole)
             passwordStrengthLabel.setText("Debole");
         } else if (score == 2) {
-            passwordStrengthBar.setStyle("-fx-accent: #ff9500;"); // arancione
+            passwordStrengthBar.setStyle("-fx-accent: #C44CFF;"); // viola medio
             passwordStrengthLabel.setText("Discreta");
         } else if (score == 3) {
-            passwordStrengthBar.setStyle("-fx-accent: #ffcc00;"); // giallo
+            passwordStrengthBar.setStyle("-fx-accent: #D48AFF;"); // viola chiaro
             passwordStrengthLabel.setText("Media");
         } else if (score == 4) {
-            passwordStrengthBar.setStyle("-fx-accent: #4cd964;"); // verde chiaro
+            passwordStrengthBar.setStyle("-fx-accent: #B066FF;"); // viola più brillante
             passwordStrengthLabel.setText("Forte");
         } else {
-            passwordStrengthBar.setStyle("-fx-accent: #34c759;"); // verde pieno
+            passwordStrengthBar.setStyle("-fx-accent: #8C3AFF;"); // viola OneCritto pieno
             passwordStrengthLabel.setText("Molto forte");
         }
     }
+
 
 
     private int calculatePasswordStrength(String pwd) {
@@ -95,7 +99,10 @@ public class EntryEditController {
             dialog.setDialogPane(pane);
             dialog.setTitle("Generatore Password");
             dialog.initOwner(passwordStrengthLabel.getScene().getWindow());
-
+            Stage dialogStage = (Stage) dialog.getDialogPane().getScene().getWindow();
+            dialogStage.getIcons().add(new Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+            ));
             // Importante: senza pulsanti il Dialog NON si chiude!
             pane.getButtonTypes().add(ButtonType.CLOSE);
 
@@ -142,7 +149,6 @@ public class EntryEditController {
             secretField.setManaged(true);
             toggleIcon.setGlyphName("EYE");  // icona occhio
 
-            toggleSecretButton.setText("Mostra");
             secretVisible = false;
 
         } else {
@@ -154,7 +160,6 @@ public class EntryEditController {
             secretVisibleField.setVisible(true);
             secretVisibleField.setManaged(true);
             toggleIcon.setGlyphName("EYE_SLASH");
-            toggleSecretButton.setText("Nascondi");
             secretVisible = true;
         }
     }

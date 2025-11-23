@@ -1,6 +1,6 @@
-package com.safebox.home.service;
+package com.onecritto.home.service;
 
-import com.safebox.home.model.Vault;
+import com.onecritto.home.model.Vault;
 import lombok.Data;
 
 import javax.crypto.SecretKey;

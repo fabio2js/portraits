@@ -1,8 +1,8 @@
-package com.safebox.home.persistence;
+package com.onecritto.home.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.safebox.home.crypto.CryptoService;
-import com.safebox.home.model.Vault;
+import com.onecritto.home.crypto.CryptoService;
+import com.onecritto.home.model.Vault;
 
 import javax.crypto.Mac;
 import javax.crypto.SecretKeyFactory;
@@ -79,8 +79,8 @@ public final class VaultFormatV2 {
     }
 
     /**
-     * Scrive il vault in formato SafeBox v2:
-     * Scrive il vault in formato SafeBox v2:
+     * Scrive il vault in formato OneCritto v2:
+     * Scrive il vault in formato OneCritto v2:
      *
      * MAGIC(4) | VERSION(1) | FLAGS(1)
      * KDF_ALGO(1) | KDF_SALT_LEN(1) | KDF_SALT | KDF_ITER(4 big-endian)
@@ -173,7 +173,7 @@ public final class VaultFormatV2 {
         byte[] all = Files.readAllBytes(file);
 
         if (all.length < MAGIC.length + 1 + 1 + 1 + 1 + SALT_LEN + 4 + 1 + 1 + IV_LEN + HMAC_SIZE) {
-            throw new IllegalStateException("File vault troppo piccolo per essere SafeBox v2");
+            throw new IllegalStateException("File vault troppo piccolo per essere OneCritto v2");
         }
 
         int offset = 0;
@@ -181,7 +181,7 @@ public final class VaultFormatV2 {
         // MAGIC
         for (int i = 0; i < MAGIC.length; i++) {
             if (all[offset + i] != MAGIC[i]) {
-                throw new IllegalStateException("Magic header non valido. Il file non è un vault SafeBox.");
+                throw new IllegalStateException("Magic header non valido. Il file non è un vault OneCritto.");
             }
         }
         offset += MAGIC.length;

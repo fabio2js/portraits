@@ -1,11 +1,8 @@
-package com.safebox.home.model;
+package com.onecritto.home.model;
 
-import com.safebox.home.crypto.CryptoService;
 import lombok.Data;
 
-import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 @Data
 public class Vault {

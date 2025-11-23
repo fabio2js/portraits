@@ -1,4 +1,4 @@
-package com.safebox.home.model;
+package com.onecritto.home.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;

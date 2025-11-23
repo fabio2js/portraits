@@ -1,0 +1,250 @@
+/* ===========================================
+   GLOBAL FOCUS COLOR (Fix Blue)
+   =========================================== */
+
+* {
+    -fx-focus-color: #6A0DFF;
+    -fx-faint-focus-color: #6A0DFF22;
+}
+
+/* ===========================================
+   TextField + PasswordField
+   =========================================== */
+.text-field, .password-field {
+    -fx-border-width: 1;      /* era 1.5 */
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-border-color: #cccccc;
+}
+
+.text-field:focused, .password-field:focused {
+    -fx-border-width: 1;      /* era 1.5 */
+    -fx-border-color: #6A0DFF;
+}
+
+/* ===========================================
+   Button
+   =========================================== */
+
+.button {
+    -fx-border-width: 1;     /* era 1.5 */
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-border-color: transparent;
+}
+
+.button:hover {
+    -fx-background-color: #f4e8ff;
+    -fx-border-width: 1;     /* era 1.5 */
+    -fx-border-color: #6A0DFF;
+}
+
+.button:focused {
+    -fx-border-width: 1;
+    -fx-border-color: #6A0DFF;
+}
+
+/* ===========================================
+   TabPane
+   =========================================== */
+
+/* Testo tab */
+.tab-pane .tab .tab-label {
+    -fx-font-weight: normal;
+}
+
+/* Tab selezionato: testo bold */
+.tab-pane .tab:selected .tab-label {
+    -fx-font-weight: bold;
+}
+
+
+
+
+
+ /* Bordi principali */
+ .table-view {
+     -fx-border-width: 1;
+     -fx-border-color: #cccccc;
+
+     /* Colore testo durante la selezione (focused) */
+     -fx-selection-bar-text: black;
+
+     /* Colore testo durante la selezione (non focused) */
+     -fx-selection-bar-non-focused-text: black;
+ }
+
+ /* Header colonne */
+ .table-view .column-header-background {
+     -fx-border-width: 0 0 1 0;
+ }
+
+ /* Celle */
+ .table-view .table-cell {
+     -fx-border-width: 0 0 1 0;
+     -fx-border-color: #eeeeee;
+ }
+
+ /* Riga selezionata */
+ .table-row-cell:selected {
+     -fx-background-color: #ecd9ff;
+     -fx-text-fill: black;
+ }
+/* ===========================================
+   GENERIC PROGRESS BARS (Backup, Restore...)
+   =========================================== */
+
+.progress-bar {
+    -fx-border-width: 1;   /* era 2 implicito */
+}
+
+.progress-bar > .track {
+    -fx-background-color: #e8ddff;
+    -fx-background-radius: 3;
+}
+
+.progress-bar > .bar {
+    -fx-background-color: #7A3FF2;
+    -fx-background-radius: 3;
+}
+
+/* Forza stile OneCritto */
+.onecritto-progress > .bar {
+    -fx-background-color: #7A3FF2 !important;
+}
+
+.onecritto-progress > .track {
+    -fx-background-color: #e8ddff !important;
+}
+
+/* ===========================================
+   Password Strength Bars
+   =========================================== */
+
+.progress-bar.strength-weak > .bar {
+    -fx-background-color: #ff4444;
+}
+
+.progress-bar.strength-medium > .bar {
+    -fx-background-color: #ff8800;
+}
+
+.progress-bar.strength-good > .bar {
+    -fx-background-color: #c466ff;
+}
+
+.progress-bar.strength-strong > .bar {
+    -fx-background-color: #8c3aff;
+}
+
+.progress-bar.strength-very-strong > .bar {
+    -fx-background-color: #5b2bff;
+}
+/* ======================================= */
+/*      COMBOBOX – FIX AZZURRO WINDOWS     */
+/* ======================================= */
+
+/* Bordo focus violetto */
+.combo-box:focused,
+.combo-box:focused .arrow-button {
+    -fx-border-color: #A45CFF;
+    -fx-border-width: 1;
+    -fx-background-insets: 0;
+}
+
+/* Sfondo della text-area principale */
+.combo-box,
+.combo-box .list-cell {
+    -fx-background-color: white;
+    -fx-text-fill: #222;
+}
+
+/* Popup list (menu a tendina) */
+.combo-box-popup .list-view {
+    -fx-background-color: white;
+    -fx-control-inner-background: white;
+    -fx-border-color: #A45CFF;
+    -fx-border-width: 1;
+}
+
+/* Riga selezionata – quando il menu è aperto */
+.combo-box-popup .list-view .list-cell:selected {
+    -fx-background-color: #A45CFF;
+    -fx-text-fill: white;
+}
+
+/* Riga con hover */
+.combo-box-popup .list-view .list-cell:hover {
+    -fx-background-color: #C27BFF;
+    -fx-text-fill: white;
+}
+
+/* Evita che Windows forzi l'azzurro (tema default) */
+.combo-box-base:focused,
+.combo-box-base:armed,
+.combo-box-base:selected {
+    -fx-background-color: white;
+}
+.header-bar {
+    -fx-min-height: 70px;   /* puoi aumentare es. 80px o 100px */
+    -fx-pref-height: 70px;
+    -fx-max-height: 70px;
+
+    /* Gradiente orizzontale SX→DX */
+    -fx-background-color: linear-gradient(
+        to right,
+        #ffffff 0%,     /* bianco puro */
+        #f3e9ff 30%,    /* viola chiarissimo */
+        #b47bff 60%,    /* viola pieno */
+        #000000 100%    /* nero */
+    );
+
+    -fx-padding: 15;
+    -fx-alignment: CENTER_LEFT;
+}
+.header-bar {
+    -fx-padding: 30 0 30 15; /* aumento margine sotto */
+}
+.button {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 6, 0, 0, 1);
+}
+
+.stats-label {
+    -fx-text-fill: #555;
+    -fx-font-weight: 600;
+    -fx-padding: 4 0 8 0;
+}
+
+/* =========================================== */
+/* FIX DEFINITIVO TESTO NERO IN CELLA SELEZIONATA */
+/* =========================================== */
+
+/* Testo delle celle selezionate (focused e non) */
+.table-view .table-row-cell:selected .table-cell,
+.table-view .table-row-cell:selected .table-cell .text {
+    -fx-text-fill: black !important;
+    -fx-fill: black !important;
+}
+
+/* Per alcune skin serve anche questo */
+.table-row-cell:selected .text {
+    -fx-fill: black !important;
+}
+
+/* Protezione ulteriore per Modena */
+.table-view {
+    -fx-selection-bar-text: black !important;
+    -fx-selection-bar-non-focused-text: black !important;
+}
+.table-view {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.10), 8, 0, 0, 2);
+}
+
+
+.button {
+    -fx-transition: 0.15s;
+}
+
+#countdownLabel {
+    -fx-text-fill: rgba(0,0,0,0.55);
+}

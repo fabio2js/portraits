@@ -1,4 +1,4 @@
-package com.safebox.home.util;
+package com.onecritto.home.util;
 
 import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;

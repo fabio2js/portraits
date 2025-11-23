@@ -1,11 +1,12 @@
-package com.safebox.home.ui;
+package com.onecritto.home.ui;
 
-import com.safebox.home.model.SecretEntry;
+import com.onecritto.home.model.SecretEntry;
 import de.jensd.fx.glyphs.fontawesome.FontAwesomeIconView;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyEvent;
@@ -14,7 +15,9 @@ import javafx.stage.Stage;
 import lombok.Getter;
 import lombok.Setter;
 
-import static com.safebox.home.util.UIUtils.showToast;
+import java.util.Objects;
+
+import static com.onecritto.home.util.UIUtils.showToast;
 
 public class AddEntryController {
 
@@ -75,7 +78,10 @@ public class AddEntryController {
             dialog.setDialogPane(pane);
             dialog.setTitle("Generatore Password");
             dialog.initOwner(passwordTextField.getScene().getWindow());
-
+            Stage dialogStage = (Stage) dialog.getDialogPane().getScene().getWindow();
+            dialogStage.getIcons().add(new Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+            ));
             // Importante: senza pulsanti il Dialog NON si chiude!
             pane.getButtonTypes().add(ButtonType.CLOSE);
 
@@ -105,7 +111,6 @@ public class AddEntryController {
             passwordField.setVisible(false);
             passwordField.setManaged(false);
 
-            togglePasswordButton.setText("Nascondi");
         } else {
             // passiamo a password field
             passwordField.setText(passwordTextField.getText());
@@ -115,7 +120,6 @@ public class AddEntryController {
             passwordTextField.setVisible(false);
             passwordTextField.setManaged(false);
 
-            togglePasswordButton.setText("Mostra");
         }
     }
 
@@ -131,23 +135,28 @@ public class AddEntryController {
 
         switch (score) {
             case 0, 1 -> {
-                passwordStrengthBar.setStyle("-fx-accent: #ff3b30;");
+                // Debole
+                passwordStrengthBar.setStyle("-fx-accent: #A300B8;");  // viola molto scuro
                 passwordStrengthLabel.setText("Debole");
             }
             case 2 -> {
-                passwordStrengthBar.setStyle("-fx-accent: #ff9500;");
+                // Discreta
+                passwordStrengthBar.setStyle("-fx-accent: #C44CFF;");  // viola medio
                 passwordStrengthLabel.setText("Discreta");
             }
             case 3 -> {
-                passwordStrengthBar.setStyle("-fx-accent: #ffcc00;");
+                // Media
+                passwordStrengthBar.setStyle("-fx-accent: #D48AFF;");  // viola chiaro
                 passwordStrengthLabel.setText("Media");
             }
             case 4 -> {
-                passwordStrengthBar.setStyle("-fx-accent: #4cd964;");
+                // Forte
+                passwordStrengthBar.setStyle("-fx-accent: #B066FF;");  // viola brillante
                 passwordStrengthLabel.setText("Forte");
             }
             case 5 -> {
-                passwordStrengthBar.setStyle("-fx-accent: #34c759;");
+                // Molto forte
+                passwordStrengthBar.setStyle("-fx-accent: #8C3AFF;");  // viola OneCritto pieno
                 passwordStrengthLabel.setText("Molto forte");
             }
         }

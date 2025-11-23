@@ -1,11 +1,13 @@
-package com.safebox.home.ui;
+package com.onecritto.home.ui;
 
-import com.safebox.home.crypto.CryptoService;
-import com.safebox.home.model.SecretEntry;
-import com.safebox.home.model.SecretFile;
-import com.safebox.home.persistence.VaultFormatV2;
-import com.safebox.home.service.VaultContext;
-import com.safebox.home.util.UIUtils;
+import com.onecritto.home.App;
+import com.onecritto.home.crypto.CryptoService;
+import com.onecritto.home.model.SecretEntry;
+import com.onecritto.home.model.SecretFile;
+import com.onecritto.home.persistence.VaultFormatV2;
+import com.onecritto.home.security.TempVaultFiles;
+import com.onecritto.home.service.VaultContext;
+import com.onecritto.home.util.UIUtils;
 import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
 import javafx.animation.KeyFrame;
@@ -18,7 +20,7 @@ import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
-import com.safebox.home.persistence.VaultRepository;
+import com.onecritto.home.persistence.VaultRepository;
 
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
@@ -31,12 +33,12 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.effect.GaussianBlur;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
-import javafx.stage.FileChooser;
-import javafx.stage.Modality;
-import javafx.stage.Stage;
+import javafx.stage.*;
 import javafx.stage.Window;
 import javafx.util.Duration;
 import lombok.Setter;
@@ -44,6 +46,7 @@ import lombok.Setter;
 import javax.crypto.SecretKey;
 import java.awt.*;
 import java.io.*;
+import java.net.URL;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,7 +62,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-import static com.safebox.home.util.UIUtils.*;
+import static com.onecritto.home.util.UIUtils.*;
 
 public class MainController {
 
@@ -98,56 +101,9 @@ public class MainController {
 
     @FXML private TextField searchTextField;
 
-    private ObservableList<SecretEntry> fullEntries = FXCollections.observableArrayList();
-    private ObservableList<SecretFile> fullFiles    = FXCollections.observableArrayList();
-    /**
-     * Esporta un backup cifrato del vault:
-     *  - safebox.vault (già cifrato)
-     *  - directory files/ con i .enc (già cifrati)
-     */
-    private void exportEncryptedBackup(File outputFile) throws Exception {
+    final private ObservableList<SecretEntry> fullEntries = FXCollections.observableArrayList();
+    final private ObservableList<SecretFile> fullFiles    = FXCollections.observableArrayList();
 
-        // Path del file vault, es: .../vaults/safebox.vault
-        Path vaultPath = context.getVaultPath();
-
-        // Directory dei file cifrati, es: .../vaults/files
-        Path filesDir = vaultPath.getParent().resolve("files");
-
-        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(outputFile))) {
-
-            // 1) Aggiungi il file vault principale
-            addToZip(zos, vaultPath.toFile(), "safebox.vault");
-
-            // 2) Aggiungi i file cifrati, se la directory esiste
-            if (Files.isDirectory(filesDir)) {
-                try (DirectoryStream<Path> stream = Files.newDirectoryStream(filesDir)) {
-                    for (Path p : stream) {
-                        if (Files.isRegularFile(p)) {
-                            addToZip(zos, p.toFile(), "files/" + p.getFileName().toString());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Utility per aggiungere un file al file ZIP.
-     */
-    private void addToZip(ZipOutputStream zos, File file, String entryName) throws IOException {
-        ZipEntry entry = new ZipEntry(entryName);
-        zos.putNextEntry(entry);
-
-        try (InputStream in = new FileInputStream(file)) {
-            byte[] buffer = new byte[8192];
-            int len;
-            while ((len = in.read(buffer)) != -1) {
-                zos.write(buffer, 0, len);
-            }
-        }
-
-        zos.closeEntry();
-    }
 
 
 
@@ -156,13 +112,17 @@ public class MainController {
 
     @FXML
     private void handleRestoreBackup() throws Exception {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Ripristina backup SafeBox");
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Backup Safebox (*.sbx)", "*.sbx")
-        );
 
-        File backup = chooser.showOpenDialog(fileTable.getScene().getWindow());
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Seleziona file vault OneCritto");
+
+        Stage fcStage = (Stage) mainRoot.getScene().getWindow();
+        fcStage.getIcons().add(new javafx.scene.image.Image(
+                Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+        ));
+       File backup = chooser.showOpenDialog(fcStage);
+
+
         if (backup == null) return;
 
         restoreBackup(backup);
@@ -187,21 +147,42 @@ public class MainController {
     private char[] masterPasswordCopy;
 
     private void restoreBackup(File backupFile) throws Exception {
-
-
-
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setHeaderText("Ripristino backup");
         alert.setContentText("L’operazione sovrascriverà TUTTO il vault corrente, inclusi file e password. Procedere?");
-        alert.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
 
-        if (alert.showAndWait().orElse(ButtonType.NO) != ButtonType.YES)
+        alert.setGraphic(QUESTION);
+
+        ButtonType si = new ButtonType("Sì", ButtonBar.ButtonData.YES);
+        ButtonType no = new ButtonType("No", ButtonBar.ButtonData.NO);
+        alert.getButtonTypes().setAll(si, no);
+
+// === OneCritto theme ===
+        DialogPane pane = alert.getDialogPane();
+        pane.getStylesheets().add(
+                Objects.requireNonNull(getClass().getResource("/css/onecritto-alert-buttons.css")).toExternalForm()
+        );
+        pane.getStyleClass().add("onecritto-alert");
+
+// Icona OneCritto
+        ((Stage) alert.getDialogPane().getScene().getWindow())
+                .getIcons()
+                .add(new Image(
+                        Objects.requireNonNull(getClass().getResourceAsStream(
+                                "/icons/onecritto_white_key_32x32.png"))
+                ));
+
+        Optional<ButtonType> result = alert.showAndWait();
+
+// === QUI la parte corretta ===
+        if (result.isEmpty() || result.get() != si) {
             return;
+        }
 
         Path vaultPath = context.getVaultPath();          // es: .../vault.json
         Path vaultDir  = vaultPath.getParent();           // es: cartella vault/
         Path filesDir  = vaultDir.resolve("files");       // es: cartella vault/files/
-        // === DIALOG PASSWORD MIGLIORATO ===
+
         Dialog<char[]> pwdDialog = new Dialog<>();
         pwdDialog.setTitle("Password vault");
         pwdDialog.setHeaderText("Inserisci la password del vault di backup");
@@ -209,6 +190,28 @@ public class MainController {
 // Bottoni
         ButtonType okType = new ButtonType("Ripristina", ButtonBar.ButtonData.OK_DONE);
         pwdDialog.getDialogPane().getButtonTypes().setAll(okType, ButtonType.CANCEL);
+
+// === Applica tema OneCritto ===
+          pane = pwdDialog.getDialogPane();
+
+        pane.getStylesheets().add(
+                Objects.requireNonNull(App.class.getResource("/css/onecritto-alert-buttons.css"))
+                        .toExternalForm()
+        );
+        pane.getStyleClass().add("onecritto-alert");
+
+// Icona OneCritto
+        DialogPane finalPane = pane;
+        pwdDialog.setOnShown(ev ->
+                ((Stage) finalPane.getScene().getWindow())
+                        .getIcons()
+                        .add(new Image(
+                                Objects.requireNonNull(getClass().getResourceAsStream(
+                                        "/icons/onecritto_white_key_32x32.png"))
+                        ))
+        );
+
+// Bottoni
 
 // Layout migliorato
         GridPane grid = new GridPane();
@@ -270,7 +273,7 @@ public class MainController {
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(backupFile))) {
             ZipEntry en;
             while ((en = zis.getNextEntry()) != null) {
-                if (en.getName().equals("safebox.vault")) {
+                if (en.getName().endsWith(".ocv")) {
                     try (OutputStream os = Files.newOutputStream(tempVault)) {
                         zis.transferTo(os);  // estrazione unica del file vault
                     }
@@ -468,14 +471,22 @@ public class MainController {
 
     @FXML
     private void handleExportBackup() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Esporta backup SafeBox");
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Backup Safebox (*.sbx)", "*.sbx")
-        );
-        chooser.setInitialFileName("safebox_backup.sbx");
+        URL url = getClass().getResource("/icons/onecritto_white_key_32x32.png");
+        java.awt.Image icon = Toolkit.getDefaultToolkit().getImage(url);
 
-        File out = chooser.showSaveDialog(fileTable.getScene().getWindow());
+
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Esporta backup OneCritto");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Backup OneCritto (*.bkp)", "*.bkp")
+        );
+        Stage fcStage = (Stage) mainRoot.getScene().getWindow();
+        fcStage.getIcons().add(new javafx.scene.image.Image(
+                Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+        ));
+
+        File out = chooser.showSaveDialog(fcStage);
         if (out == null) return;
 
         runBackupTask(out);
@@ -520,7 +531,8 @@ public class MainController {
 
                     // ---------- 1) File vault ----------
                     copied = writeWithProgressInsideTask(zos, vaultPath.toFile(),
-                            "safebox.vault", copied, totalBytes, start);
+                            vaultPath.getFileName().toString()
+                            , copied, totalBytes, start);
 
                     // ---------- 2) File cifrati ----------
                     if (Files.isDirectory(filesDir)) {
@@ -635,6 +647,9 @@ public class MainController {
     private boolean locked = false;
     @FXML
     private void initialize() {
+        fileProgressBar.getStyleClass().add("onecritto-progress");
+
+
 // ----- SEARCH -----
         searchTextField.textProperty().addListener((obs, oldV, newV) -> {
             applySearchFilter(newV);
@@ -663,8 +678,26 @@ public class MainController {
     @FXML private BorderPane appRoot;
 
 
+    public static final ImageView QUESTION;
+    public static final ImageView INFO;
+
+    static {
+
+        Image img = new Image(Objects.requireNonNull(MainController.class.getResource("/icons/onecritto_question.png")).toExternalForm());
+        QUESTION = new ImageView(img);
+        QUESTION.setFitWidth(48);
+        QUESTION.setFitHeight(48);
+
+        Image img2 = new Image(Objects.requireNonNull(MainController.class.getResource("/icons/onecritto_info.png")).toExternalForm());
+        INFO  = new ImageView(img2);
+        INFO.setFitWidth(48);
+        INFO.setFitHeight(48);
+    }
+
+
     private void unlockScreen(char[] pwd) {
         try {
+
             // 1) Ricostruzione KEY da password
             byte[] keyMaterial = VaultFormatV2.deriveKeyMaterial(
                     pwd,
@@ -736,11 +769,26 @@ public class MainController {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Ripristino effettuato");
         alert.setHeaderText("Ripristino dati OK");
-
         alert.setContentText("Ripristino dati avvenuto correttamente");
-        // opzionale: finestra sopra tutte
-        Stage stage = (Stage) fileTable.getScene().getWindow();
-        alert.initOwner(stage);
+
+        alert.setGraphic(INFO);
+
+        DialogPane pane = alert.getDialogPane();
+        pane.getStylesheets().add(
+                Objects.requireNonNull(getClass().getResource("/css/onecritto-alert-buttons.css"))
+                        .toExternalForm()
+        );
+
+// applica la classe per attivare il CSS
+        pane.getStyleClass().add("onecritto-alert");
+
+// icona OneCritto
+        ((Stage) pane.getScene().getWindow())
+                .getIcons()
+                .add(new Image(
+                        Objects.requireNonNull(getClass().getResourceAsStream(
+                                "/icons/onecritto_white_key_32x32.png"))
+                ));
 
         alert.showAndWait();
     }
@@ -750,12 +798,28 @@ public class MainController {
         alert.setHeaderText("Backup esportato correttamente");
         alert.setContentText("Percorso del file:\n" + output.getAbsolutePath());
 
-        // opzionale: finestra sopra tutte
-        Stage stage = (Stage) fileTable.getScene().getWindow();
-        alert.initOwner(stage);
+        alert.setGraphic(INFO);
+
+        // === Applica stile OneCritto ai bottoni ===
+        DialogPane pane = alert.getDialogPane();
+        pane.getStylesheets().add(
+                Objects.requireNonNull(getClass().getResource("/css/onecritto-alert-buttons.css"))
+                        .toExternalForm()
+        );
+        pane.getStyleClass().add("onecritto-alert");   // ★★ RIGA MANCANTE ★★
+
+        // Mostra il dialog e SOLO DOPO applica l’icona
+        alert.setOnShown(ev -> {
+            Stage s = (Stage) alert.getDialogPane().getScene().getWindow();
+            s.getIcons().add(new Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream(
+                            "/icons/onecritto_white_key_32x32.png"))
+            ));
+        });
 
         alert.showAndWait();
     }
+
 
     private void registerSceneActivity(Scene scene) {
         scene.addEventFilter(MouseEvent.ANY, e -> resetInactivityTimer());
@@ -1145,7 +1209,14 @@ public class MainController {
 
             Stage stage = new Stage();
             stage.setTitle("Modifica voce");
+
             stage.setScene(new Scene(root));
+            stage.getIcons().add(new Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+            ));
+            stage.getScene().getStylesheets().add(
+                    Objects.requireNonNull(App.class.getResource("/css/onecritto-theme.css")).toExternalForm()
+            );
             stage.initModality(Modality.APPLICATION_MODAL);
             stage.setResizable(false);
             stage.addEventFilter(MouseEvent.ANY, e -> resetInactivityTimer());
@@ -1169,6 +1240,13 @@ public class MainController {
             dialog.setTitle("Nuova voce");
             dialog.initOwner(tableEntries.getScene().getWindow());
             dialog.setResizable(false);
+            dialog.getScene().getStylesheets().add(
+                    Objects.requireNonNull(App.class.getResource("/css/onecritto-theme.css")).toExternalForm()
+            );
+            dialog.getIcons().add(new Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+            ));
+
 
             AddEntryController ctrl = loader.getController();
             ctrl.setMainController(this);
@@ -1237,9 +1315,15 @@ public class MainController {
     @FXML
     private void handleAddFile() {
 
+
+
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Aggiungi file al vault");
-        File file = chooser.showOpenDialog(fileTable.getScene().getWindow());
+        chooser.setTitle("Seleziona file vault");
+        Stage fcStage = (Stage) mainRoot.getScene().getWindow();
+        fcStage.getIcons().add(new javafx.scene.image.Image(
+                Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+        ));
+        File file = chooser.showOpenDialog(fcStage);
         if (file == null) return;
 
         long totalBytes = file.length();
@@ -1333,6 +1417,7 @@ public class MainController {
         prepareProgressUi();
         fileProgressBar.progressProperty().bind(task.progressProperty());
 
+
         task.setOnSucceeded(e -> {
             resetProgressUi();
 
@@ -1415,11 +1500,10 @@ public class MainController {
             return;
         }
 
-        // File temporaneo
+        // File temporaneo sicuro in ~/.onecritto/temp
         Path temp;
         try {
-            temp = Files.createTempFile("safebox_", "_" + sf.getFilename());
-            temp.toFile().deleteOnExit();
+            temp = TempVaultFiles.createTempFileForOpen(sf.getFilename());
         } catch (IOException e) {
             showError("Impossibile creare file temporaneo");
             return;
@@ -1540,8 +1624,11 @@ public class MainController {
             FileChooser chooser = new FileChooser();
             chooser.setTitle("Esporta file");
             chooser.setInitialFileName(selected.getFilename());
-
-            File dest = chooser.showSaveDialog(fileTable.getScene().getWindow());
+            Stage fcStage = (Stage) mainRoot.getScene().getWindow();
+            fcStage.getIcons().add(new javafx.scene.image.Image(
+                    Objects.requireNonNull(getClass().getResourceAsStream("/icons/onecritto_white_key_32x32.png"))
+            ));
+            File dest = chooser.showSaveDialog(fcStage);
             if (dest == null) return;
 
             long totalBytes = Files.size(encryptedPath);
@@ -1647,12 +1734,25 @@ public class MainController {
         confirm.setHeaderText("Vuoi eliminare definitivamente le voci selezionate?");
         confirm.setContentText("Elimina Voci");
 
+        confirm.setGraphic(QUESTION);
+
         ButtonType yes = new ButtonType("Elimina", ButtonBar.ButtonData.OK_DONE);
         ButtonType no = new ButtonType("Annulla", ButtonBar.ButtonData.CANCEL_CLOSE);
         confirm.getButtonTypes().setAll(yes, no);
 
         confirm.initOwner(tableEntries.getScene().getWindow());
+        DialogPane pane = confirm.getDialogPane();
+        pane.getStylesheets().add(
+                Objects.requireNonNull(getClass().getResource("/css/onecritto-alert-buttons.css")).toExternalForm()
+        );
+        pane.getStyleClass().add("onecritto-alert");
 
+        ((Stage) confirm.getDialogPane().getScene().getWindow())
+                .getIcons()
+                .add(new Image(
+                        Objects.requireNonNull(getClass().getResourceAsStream(
+                                "/icons/onecritto_white_key_32x32.png"))
+                ));
         confirm.showAndWait().ifPresent(response -> {
             if (response == yes) {
                 deleteEntries();
@@ -1699,6 +1799,9 @@ public class MainController {
         confirm.setTitle("Conferma eliminazione file");
         confirm.setHeaderText("Vuoi eliminare questi file dal vault?");
         confirm.setContentText("eliminazione files dal vault");
+
+
+        confirm.setGraphic(QUESTION);
 
         ButtonType yes = new ButtonType("Elimina", ButtonBar.ButtonData.OK_DONE);
         ButtonType no  = new ButtonType("Annulla", ButtonBar.ButtonData.CANCEL_CLOSE);
