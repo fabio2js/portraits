@@ -6,3 +6,7 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 
 .contact>p.secondary-contact{font-size:12px;margin-top:24px;color:var(--muted)}.instagram-link{color:var(--muted);text-decoration:underline;text-underline-offset:4px}.instagram-link:hover{color:var(--ink)}
+
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:64px;align-items:start}.hero-copy{min-width:0}.hero-portrait{display:block;width:100%;height:auto;margin-top:42px}.hero-foot{grid-column:1 / -1}
+@media(max-width:1100px) and (min-width:651px){.hero{grid-template-columns:minmax(0,1fr) 28%;column-gap:30px}.hero h1{font-size:clamp(54px,7.2vw,80px)}}
+@media(max-width:650px){.hero{grid-template-columns:minmax(0,1fr);gap:0}.hero-portrait{width:min(100%,300px);justify-self:end;margin-top:32px}}
